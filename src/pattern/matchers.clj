@@ -546,27 +546,39 @@
                               (update-in dict [var-name :value] conj nil)
                               dict)))
                   dict matcher-vars))
-              (gather [dict n data env matches]
-                (if (and (if (symbol? at-most)
-                           ;; no match if undefined
-                           (< (.repetition ^Env env) (:value (dict at-most) 0))
-                           (< (.repetition ^Env env) at-most))
-                      (has-n? reserve-min-tail data))
-                  (bouncing
-                    (or (match-part
-                          data dict
-                          (assoc env
-                            :succeed
-                            (fn seq-succeed [dict n']
-                              (let [reps (inc (.repetition ^Env env))
-                                    dict (level-sequences reps dict)]
-                                (gather dict (+ n n') (drop n' data)
-                                  (assoc env :repetition reps)
-                                  (if (test-match reps dict)
-                                    (conj matches [dict (+ n n')])
-                                    matches))))))
-                      matches))
-                  matches))]
+              ;; Iterative gather: matches one repetition at a time using
+              ;; match-part synchronously via atom capture. Avoids O(n) stack
+              ;; depth for n repetitions (the recursive callback chain in the
+              ;; original gather overflows around 500-600 repetitions).
+              (gather-iterative [dict n data env matches]
+                (loop [dict dict, n n, data data, env env, matches matches]
+                  (if (and (if (symbol? at-most)
+                             (< (.repetition ^Env env) (:value (dict at-most) 0))
+                             (< (.repetition ^Env env) at-most))
+                        (has-n? reserve-min-tail data))
+                    ;; Try matching one repetition synchronously
+                    (let [result (atom nil)
+                          matched (match-part
+                                    data dict
+                                    (assoc env
+                                      :succeed
+                                      (fn [dict' n']
+                                        (reset! result [dict' n'])
+                                        true)))]
+                      (if (and matched @result)
+                        (let [[new-dict n'] @result
+                              reps (inc (.repetition ^Env env))
+                              new-dict (level-sequences reps new-dict)
+                              new-matches (if (test-match reps new-dict)
+                                            (conj matches [new-dict (+ n n')])
+                                            matches)]
+                          (recur new-dict (+ n n') (drop n' data)
+                                 (assoc env :repetition reps)
+                                 new-matches))
+                        ;; match-part failed, stop gathering
+                        matches))
+                    ;; limit reached or no more data
+                    matches)))]
         (with-meta
           (fn many-matcher [data dictionary ^Env env]
             (let [dict (reduce (fn [d var] ;; Populate the dictionary with a set of empty matches if none exist
@@ -576,16 +588,15 @@
                            :sequence/id (gensym))
                          matcher-vars)
                   matches
-                  (trampolining
-                    (gather dict 0 data
-                      ;; Alter lookup behavior and make no-match in match-optional fail
-                      (assoc env
-                        :lookup sequence-lookup
-                        :store sequence-extend-dict
-                        :repetition 0)
-                      (if (test-match 0 dict)
-                        [[dict 0]]
-                        [])))]
+                  (gather-iterative dict 0 data
+                    ;; Alter lookup behavior and make no-match in match-optional fail
+                    (assoc env
+                      :lookup sequence-lookup
+                      :store sequence-extend-dict
+                      :repetition 0)
+                    (if (test-match 0 dict)
+                      [[dict 0]]
+                      []))]
               (loop [matches matches]
                 (when-let [[dict n] (peek matches)]
                   (or ((.succeed env) dict n)
