@@ -3,7 +3,7 @@
   (:require [genera :refer [defgenera defgenera= defgen defgen* defgen= defmethod* defmethod!
                             trampoline trampolining bouncing]]
             [uncomplicate.fluokitten.core :as f]
-            [pattern.types :refer [->Length]]
+            [pattern.types :refer [->Length] :as t]
             [pattern.match.predicator :refer [*pattern-replace*]]
             [pattern.util :refer [listy?]]
             [pure-conditioning :as c :refer [condition restarts default manage restart-with handler-cond]]
@@ -437,8 +437,9 @@
                       :force (fn force
                                ([] ((.succeed env) dictionary 1))
                                ([binding] (force binding 1))
-                               ([binding match-length] ((.succeed env) ((.store env) (var-name pattern) binding '? dictionary env) match-length)))
-                      :ignore (fn [] ((.succeed env) dictionary 0))
+                               ([binding match-length]
+                                ((.succeed env) ((.store env) (var-name pattern) binding nil '? dictionary env) match-length)))
+                      :ignore (fn [_] ((.succeed env) dictionary 1))
                       :fail false
                       more-restarts)
                (default false))))

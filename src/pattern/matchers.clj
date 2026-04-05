@@ -28,7 +28,6 @@
   (:refer-clojure :exclude [trampoline])
   (:use pattern.match.core)
   (:require [genera :refer [trampoline trampolining bouncing defgen=]]
-            [uncomplicate.fluokitten.core :as f]
             [pattern.types :refer [spliceable-pattern]]
             [pattern.match.core :as m]
             [pattern.match.predicator :refer [var-abbr]])
@@ -550,6 +549,9 @@
               ;; match-part synchronously via atom capture. Avoids O(n) stack
               ;; depth for n repetitions (the recursive callback chain in the
               ;; original gather overflows around 500-600 repetitions).
+              ;; Also handles zero-length matches: when match-part succeeds but
+              ;; consumes 0 elements and we already have ≥1 repetition, stop
+              ;; to prevent infinite loops.
               (gather-iterative [dict n data env matches]
                 (loop [dict dict, n n, data data, env env, matches matches]
                   (if (and (if (symbol? at-most)
@@ -566,15 +568,26 @@
                                         (reset! result [dict' n'])
                                         true)))]
                       (if (and matched @result)
-                        (let [[new-dict n'] @result
-                              reps (inc (.repetition ^Env env))
-                              new-dict (level-sequences reps new-dict)
-                              new-matches (if (test-match reps new-dict)
-                                            (conj matches [new-dict (+ n n')])
-                                            matches)]
-                          (recur new-dict (+ n n') (drop n' data)
-                                 (assoc env :repetition reps)
-                                 new-matches))
+                        (let [[new-dict n'] @result]
+                          (if (zero? n')
+                            ;; Zero-length match: if we already have ≥1 rep, stop
+                            ;; to prevent infinite loop. Otherwise count it once.
+                            (if (>= (.repetition ^Env env) 1)
+                              matches
+                              (let [reps (inc (.repetition ^Env env))
+                                    new-dict (level-sequences reps new-dict)]
+                                (if (test-match reps new-dict)
+                                  (conj matches [new-dict n])
+                                  matches)))
+                            ;; Normal match: consumed n' elements
+                            (let [reps (inc (.repetition ^Env env))
+                                  new-dict (level-sequences reps new-dict)
+                                  new-matches (if (test-match reps new-dict)
+                                                (conj matches [new-dict (+ n n')])
+                                                matches)]
+                              (recur new-dict (+ n n') (drop n' data)
+                                     (assoc env :repetition reps)
+                                     new-matches))))
                         ;; match-part failed, stop gathering
                         matches))
                     ;; limit reached or no more data
@@ -766,12 +779,10 @@
               (let [binding ((.lookup env) name dictionary env)
                     bound-value (:value binding)
                     matching (into [] (filter pred) datum)]
-                (if (seq matching)
-                  (result-matcher [matching] dictionary
-                    (assoc env :succeed
-                      (fn filter-succeed [dict n]
-                        ((.succeed env) dict match-len))))
-                  (on-failure :not-found pred-name dictionary env match-len data datum)))
+                (result-matcher [matching] dictionary
+                  (assoc env :succeed
+                    (fn filter-succeed [dict n]
+                      ((.succeed env) dict match-len)))))
               (on-failure :not-sequential name dictionary env 1 data datum)))
           (on-failure :missing name dictionary env 0 data nil)))
       (cond-> (meta result-matcher)

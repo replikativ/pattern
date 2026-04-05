@@ -4,7 +4,6 @@
   Because of that, they do have access to all of the features of the library."
   (:refer-clojure :exclude [trampoline])
   (:require [genera :refer [trampoline trampolining bouncing defgen=]]
-            [uncomplicate.fluokitten.core :as f]
             [pattern.types :refer [spliceable-pattern]]
             [pattern.match.core :as m :refer :all]
             [pattern.match.predicator :refer [var-abbr]]
@@ -53,7 +52,11 @@
                        (list '?:= literal-set)
                        (list '?:set-intersection literal-set))))
         patterns (when (seq patterns)
-                   (reduce (fn [m p] (list '?:set-item p m)) nil (reverse patterns)))]
+                   (reduce (fn [m p]
+                             (if m
+                               (list '?:set-item p m)
+                               (list '?:set-item p)))
+                     nil (reverse patterns)))]
     (compile-pattern*
       (if literals
         (if (seq patterns)
@@ -107,7 +110,7 @@
         maybe? ('#{?:maybe-set-item ?:maybe-item ??:maybe-item} t)
         t ('{?:maybe-item ?:item ??:maybe-item ??:item ?:maybe-set-item ?:set-item} t t)
         no-check-set? (or (#{'?:item '??:item} t) (= false (:check-set? comp-env)))
-        closed? (:closed? comp-env)
+        closed? (or (:closed? comp-env) (= [t item nil] pattern)) ;; close set if final arg is nil
         item-var (var-name item)
         remainder-matcher (when remainder (compile-pattern* remainder comp-env))
         remove-item (if no-check-set?
