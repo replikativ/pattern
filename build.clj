@@ -1,8 +1,11 @@
 (ns build
   (:require [clojure.tools.build.api :as b]))
 
-(def lib 'com.github.pangloss/pattern)
+;; Released by replikativ as a fork of com.github.pangloss/pattern (Apache-2.0).
+;; Carries the StackOverflow fix for the ?:* sequence matcher (PR'd upstream).
+(def lib 'org.replikativ/pattern)
 (def version (format "1.0.%s" (b/git-count-revs nil)))
+(def scm-url "https://github.com/replikativ/pattern")
 (def class-dir "target/classes")
 (def jar-file (format "target/%s-%s.jar" (name lib) version))
 
@@ -17,13 +20,18 @@
                 :lib lib
                 :version version
                 :basis @basis
-                :license "Apache-2.0"
                 :src-dirs ["src"]
+                :scm {:url scm-url
+                      :connection (str "scm:git:" scm-url ".git")
+                      :developerConnection (str "scm:git:" scm-url ".git")
+                      :tag (str "v" version)}
                 :pom-data
-                [[:licenses
+                [[:description "Pattern matching and term rewriting for Clojure (replikativ fork of pangloss/pattern)."]
+                 [:url scm-url]
+                 [:licenses
                   [:license
                    [:name "Apache-2.0"]
-                   [:url "https://www.apache.org/licenses/LICENSE-2.0.txt"];]
+                   [:url "https://www.apache.org/licenses/LICENSE-2.0.txt"]
                    [:distribution "repo"]]]]})
   (b/copy-dir {:src-dirs ["src" "resources"]
                :target-dir class-dir})
