@@ -112,14 +112,48 @@
       (assoc fe :maybe-is-form expr))))
 
 ;; FIXME: when finalizing Simplified Exp, there is not atm predicator
-(defn- finalize-expr [expr predicators]
+(def ^:private sequence-shorthand-heads
+  "Sequence matchers whose dialect declarations conventionally contain bare abbreviations.
+
+  In `(do (?:+ e))` and `(?f (?:* e:args))`, `e` names the Expr form; it is not the
+  literal symbol `e`. Double-question segment syntax already carries its abbreviation explicitly,
+  but the documented `?:*`/`?:+` shorthand needs this normalization before predicators compile."
+  '#{?:* ?:+})
+
+(defn- expand-sequence-abbreviations
+  [dialect expr]
+  (let [abbreviations (->> (concat (vals (:terminals dialect)) (vals (:forms dialect)))
+                           (keep :abbr)
+                           (map name)
+                           set)
+        expand-symbol (fn [value]
+                        (if (and (symbol? value)
+                                 (nil? (namespace value))
+                                 (not (contains? #{\? \$} (first (name value))))
+                                 (some (fn [abbr]
+                                         (or (= abbr (name value))
+                                             (.startsWith ^String (name value) (str abbr ":"))))
+                                       abbreviations))
+                          (symbol (str "?" (name value)))
+                          value))]
+    (walk/postwalk
+     (fn [form]
+       (if (and (seq? form) (contains? sequence-shorthand-heads (first form)))
+         (list* (first form)
+                (map #(walk/postwalk expand-symbol %) (rest form)))
+         form))
+     expr)))
+
+(defn- finalize-expr [dialect expr predicators]
   (reduce (fn [expr [k f]]
             (if f
               (assoc expr k (f expr))
               expr))
           expr
           (partition 2
-                     [:expr #(apply-replacements (:orig-expr %) predicators)
+                     [:expr #(apply-replacements
+                              (expand-sequence-abbreviations dialect (:orig-expr %))
+                              predicators)
                       :match #(compile-pattern (:expr %))])))
 
 (defn- finalize-form [dialect form predicators]
@@ -136,7 +170,7 @@
             (update :exprs
                     (fn [exprs]
                       (reduce (fn [exprs expr]
-                                (conj exprs (finalize-expr expr predicators)))
+                                (conj exprs (finalize-expr dialect expr predicators)))
                               []
                               exprs))))
         matchers (keep :match (:exprs form))
