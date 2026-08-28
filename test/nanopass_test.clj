@@ -1,12 +1,33 @@
 (ns nanopass-test
   (:require  [clojure.test :refer :all]
              [pattern.match.predicator :refer [with-predicates]]
-             [pattern.nanopass.dialect :refer [def-dialect def-derived => ==> show-dialect]]
+             [pattern.nanopass.dialect :refer [def-dialect def-derived => ==> show-dialect valid?]]
              [pattern.nanopass.pass :refer [defpass let-rulefn]]
              [pattern.r3.combinators :refer [rule-simplifier directed rule-list]]
              [pattern.r3.core :refer [rule success]]
              [pattern.r3.rewrite :refer [sub]]
              [pattern.match.core :refer [compile-pattern* matcher]]))
+
+(def-dialect RecursiveSequenceShorthand
+  (terminals [v symbol?])
+  (Expr [e :enforce]
+        ?v
+        (?v:f (?:* e:args)))
+  (Program [p :enforce]
+           (program (?:+ e))
+           (symbols (?:* v)))
+  (entry Program))
+
+(deftest recursive-sequence-shorthand-validation
+  (testing "bare form abbreviations inside ?:*/?:+ recursively validate"
+    (is (valid? RecursiveSequenceShorthand '(program (* x (+ y z)) (identity))))
+    (is (not (valid? RecursiveSequenceShorthand '(program (* x 42))))
+        "a repeated child must conform to Expr")
+    (is (not (valid? RecursiveSequenceShorthand '(program)))
+        "?:+ still requires at least one child")
+    (is (valid? RecursiveSequenceShorthand '(symbols x y z)))
+    (is (not (valid? RecursiveSequenceShorthand '(symbols x 42)))
+        "bare terminal abbreviations recursively apply their predicate")))
 
 (def-dialect Lssa
   (terminals [l symbol?]
