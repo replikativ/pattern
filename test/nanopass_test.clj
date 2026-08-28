@@ -14,7 +14,8 @@
         ?v
         (?v:f (?:* e:args)))
   (Program [p :enforce]
-           (program (?:+ e)))
+           (program (?:+ e))
+           (symbols (?:* v)))
   (entry Program))
 
 (deftest recursive-sequence-shorthand-validation
@@ -23,7 +24,10 @@
     (is (not (valid? RecursiveSequenceShorthand '(program (* x 42))))
         "a repeated child must conform to Expr")
     (is (not (valid? RecursiveSequenceShorthand '(program)))
-        "?:+ still requires at least one child")))
+        "?:+ still requires at least one child")
+    (is (valid? RecursiveSequenceShorthand '(symbols x y z)))
+    (is (not (valid? RecursiveSequenceShorthand '(symbols x 42)))
+        "bare terminal abbreviations recursively apply their predicate")))
 
 (def-dialect Lssa
   (terminals [l symbol?]
