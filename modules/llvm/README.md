@@ -198,7 +198,13 @@ See [observations](measurements/initial-observation.json) for the measured scope
 3. **MLIR:** add an adapter using MLIR's own parser/generic operation form and
    bytecode APIs. Preserve dialect-qualified operations/types/attributes, regions,
    block arguments and symbol scopes; distinguish registered and opaque dialects.
-4. **Backend/runtime options:** native pass invocation, code generation or ORC JIT
+4. **Pass-time representations:** expose phase-labelled SelectionDAG and VPlan
+   snapshots through LLVM C++ hooks. SelectionDAG edges must retain the selected
+   result number as well as their data/control role; its DAG is destroyed after
+   instruction selection. VPlan needs its recipes, value definitions and nested
+   regions. These adapters require access during the relevant compiler phase,
+   rather than assuming the LLVM assembly reader supplies them.
+5. **Backend/runtime options:** native pass invocation, code generation or ORC JIT
    can consume verified output independently of the persistent data layer.
 
 Each adapter can reuse the persistent ID-table/use-site approach and Pattern's
@@ -210,4 +216,6 @@ References: [LLVM IR](https://llvm.org/docs/LangRef.html),
 [LLVM bitcode](https://llvm.org/docs/BitCodeFormat.html),
 [MIR](https://llvm.org/docs/MIRLangRef.html),
 [MLIR](https://mlir.llvm.org/docs/LangRef/),
+[SelectionDAG](https://llvm.org/docs/CodeGenerator.html#selectiondag-instruction-selection-process),
+[VPlan](https://llvm.org/docs/VectorizationPlan.html),
 [Bifurcan](https://github.com/lacuna/bifurcan).
