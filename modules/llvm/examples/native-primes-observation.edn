@@ -7,10 +7,10 @@
  :optimized-instructions 75,
  :performance-comparison-claimed false,
  :compiler-sha256
- "6ff4c63105e5413f186ecd316eddfb1ef021bdaf2fb9efa8a380309600fcf524",
+ "dfdb51208ac2d6e7f9cfa1f6e7ecf2a37d7f9959559cf4551c1246652176bc32",
  :semantic-probes
  {:cases 8, :results [-5 5 10 -9223372036854775808 -12 -3 -2 12]},
- :unsupported-source-rejections 6,
+ :unsupported-source-rejections 7,
  :pattern-edit-count 10,
  :results
  [{:limit -10, :prime-count 0, :prime-sum 0}

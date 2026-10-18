@@ -99,7 +99,8 @@
 (defn- expression! [state env form signatures loop-context tail?]
   (cond
     (integer? form)
-    (do (require! (<= Long/MIN_VALUE form Long/MAX_VALUE) "Integer literal is outside i64" {:form form})
+    (do (require! (and (instance? Long form) (<= Long/MIN_VALUE form Long/MAX_VALUE))
+                  "Only signed64 Long literals are supported; promotion is outside this subset" {:form form})
         {:type "i64" :value (str form)})
 
     (symbol? form)

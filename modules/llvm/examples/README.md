@@ -49,7 +49,7 @@ modules/llvm/target/native-primes/example-1/primes 100000
 Both native versions, before and after Pattern rewriting/LLVM optimization, match
 the Clojure reference on ten limits from -10 through 100,000. Eight additional
 compiler probes check parallel `recur`, nested loops, binding scope, signed
-division/remainder, wrapping overflow, bit operations and comparisons. Six source
+division/remainder, wrapping overflow, bit operations and comparisons. Seven source
 forms outside the subset are explicitly rejected. The checked-in
 [observation](native-primes-observation.edn) records the local run; these checks
 are an explicitly invoked example, separate from the module's normal test runner.
@@ -62,7 +62,9 @@ without evaluating them. The example runner separately loads the trusted
 repository-owned Clojure program and evaluates fixed semantic probes as references.
 
 - All function arguments, function results and loop variables are signed 64-bit
-  integers. Comparisons produce LLVM `i1` values used as `if` conditions. This is
+  integers. Integer literals must be Clojure `Long` values; explicit BigInt (`N`)
+  literals are rejected even when their current value fits in 64 bits. Comparisons
+  produce LLVM `i1` values used as `if` conditions. This is
   an imposed representation, rather than a general inference pass.
 - Supported forms: integer literals, locals, calls to functions in the compilation
   unit, `if`, single-body `let`, and single-body `loop/recur` with nonempty integer bindings. Loop initializers and

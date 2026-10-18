@@ -135,7 +135,8 @@
                          [(defn wrong [x] (if x 1 0))]
                          [(defn wrong-recur [x] (loop [n x] (unchecked-add (recur n) 1)))]
                          [(defn shadow [x] (let [unchecked-add x] (unchecked-add x 1)))]
-                         [(defn varargs [& xs] 1)]]
+                         [(defn varargs [& xs] 1)]
+                         [(defn promoted [] (unchecked-add 9223372036854775807N 1))]]
         _ (doseq [forms negative-forms]
             (check! (try (compiler/compile-module forms) false (catch clojure.lang.ExceptionInfo _ true))
                     "Unsupported source unexpectedly accepted" {:forms forms}))
