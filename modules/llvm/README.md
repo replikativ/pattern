@@ -203,6 +203,14 @@ integration tests separately execute only their known fixture through `lli`.
 The module also has its own `deps.edn` for source consumers using a local root or
 Git `:deps/root "modules/llvm"`. No new Maven artifact is published by this work.
 
+## Native compilation example
+
+The [REPL prime-counting example](examples/README.md) lowers a small integer
+subset of actual Clojure definitions to LLVM, applies a persistent Pattern rule,
+exports/verifies the result, and builds native executables. It includes explicit
+source semantics and differential checks; it is separate from general Clojure
+compilation support.
+
 ## Optional Bifurcan tables
 
 ```sh
