@@ -1,0 +1,277 @@
+{
+  "format": "pattern.llvm.initial-observation/1",
+  "date": "2026-10-18",
+  "base-commit": "89da31a",
+  "matching-fork-main-tree": "27e0dbe",
+  "upstream-observed": {
+    "repository": "pangloss/pattern",
+    "head": "1d5a4093291327436c3e28fbfaa66f874bcf9aca",
+    "note": "Upstream merged prior sequence-matcher fix PR25. No upstream LLVM adapter was found; no merge into this experiment was performed."
+  },
+  "llvm-version": "21.1.2",
+  "host": {
+    "clojure": "1.12.0",
+    "java": "25.0.1"
+  },
+  "bifurcan-version": "0.2.0-rc1",
+  "validation": {
+    "llvm-tests": {
+      "tests": 13,
+      "assertions": 87,
+      "failures": 0,
+      "errors": 0
+    },
+    "core-ci-tests": {
+      "tests": 88,
+      "assertions": 622,
+      "failures": 0,
+      "errors": 0
+    }
+  },
+  "process-envelopes": {
+    "llvm-tests": {
+      "command": [
+        "clojure",
+        "-J-Xmx512m",
+        "-J-Xss4m",
+        "-M:llvm:llvm-bifurcan:llvm-test",
+        "bifurcan"
+      ],
+      "exit_code": 0,
+      "guard_stop": null,
+      "peak_rss_bytes": 438685696,
+      "elapsed_seconds": 8.02
+    },
+    "core-ci-tests": {
+      "command": [
+        "clojure",
+        "-J-Xmx512m",
+        "-M:test-ci"
+      ],
+      "exit_code": 0,
+      "guard_stop": null,
+      "peak_rss_bytes": 489631744,
+      "elapsed_seconds": 13.03
+    },
+    "table-comparison": {
+      "command": [
+        "clojure",
+        "-J-Xmx256m",
+        "-M:llvm:llvm-bifurcan",
+        "-m",
+        "pattern.llvm.benchmark",
+        "{:rounds 2}"
+      ],
+      "exit_code": 0,
+      "guard_stop": null,
+      "peak_rss_bytes": 377491456,
+      "elapsed_seconds": 6.01
+    },
+    "actual-llvm-module": {
+      "command": [
+        "clojure",
+        "-J-Xmx512m",
+        "-J-Xss4m",
+        "-M:llvm",
+        "-i",
+        "modules/llvm/target/scale-probe/probe.clj"
+      ],
+      "exit_code": 0,
+      "guard_stop": null,
+      "peak_rss_bytes": 490991616,
+      "elapsed_seconds": 7.02
+    }
+  },
+  "actual-llvm-module": {
+    "edited-value-confirmed": true,
+    "source-sha256": "384f46c3166823bdc64d9e92c8755661f4b6f10552ab5dee081a04dfd4c7c889",
+    "caveat": "One cold 5000-instruction module; includes subprocess/transport/hash costs, not a competitive compiler or large-module throughput benchmark.",
+    "instructions": 5000,
+    "output-bytes": 142954,
+    "scope": "actual-native-LLVM-chain-import-fork-verified-export-reimport",
+    "types": 5,
+    "input-bytes": 142830,
+    "untouched-types-shared": true,
+    "semantic-equivalence-checked": false,
+    "llvm-version": "21.1.2",
+    "nodes": 5005,
+    "baseline-unchanged": true,
+    "milliseconds": {
+      "import-and-data-validation": 889.399839,
+      "fork-edits": 2.489152,
+      "native-verified-export": 531.201285,
+      "reimport-and-data-validation": 571.984114
+    },
+    "backend": "clojure-persistent-map",
+    "retained-forks": 32
+  },
+  "synthetic-table-comparison": {
+    "excludes": [
+      "native-parse",
+      "native-verification",
+      "graph-digest",
+      "patch-replay",
+      "disk-io",
+      "fixture-generation",
+      "result-validation",
+      "rss-measurement"
+    ],
+    "bifurcan-version": "0.2.0-rc1",
+    "caveats": [
+      "Wall times only; not a microbenchmark or statistical comparison.",
+      "No warmup phase or forced GC; first round and execution order can matter.",
+      "Bifurcan construction uses its private linear builder; updates use forked tables.",
+      "Lookup and reduce-kv use the final batch result; all fork roots remain retained.",
+      "No mandatory backend migration or blanket performance winner is inferred."
+    ],
+    "includes": [
+      "wrapper-dispatch",
+      "persistent-update",
+      "reverse-use-maintenance"
+    ],
+    "scope": "synthetic-persistent-table-comparison",
+    "jvm": {
+      "java-version": "25.0.1",
+      "vm-name": "Java HotSpot(TM) 64-Bit Server VM"
+    },
+    "llvm-input": false,
+    "configuration": {
+      "nodes": 10000,
+      "forks": 100,
+      "updates-per-fork": 10,
+      "batch-updates": 1000,
+      "lookup-count": 100000,
+      "rounds": 2
+    },
+    "fixture": {
+      "profile": "chain-with-repeated-operands-v1",
+      "sha256": "84311be19f25ee270074b1da6afa8b939fb83edd5bc5405cfe7764199ce41946",
+      "nodes": 10000,
+      "operand-sites": 19998
+    },
+    "rounds": [
+      {
+        "round": 0,
+        "samples": [
+          {
+            "backend": "clojure-persistent-map",
+            "milliseconds": {
+              "build": 6.42517,
+              "retained-forks": 19.273941,
+              "batch": 12.259514,
+              "lookup": 115.582196,
+              "reduce-kv": 8.8166
+            },
+            "validated": true,
+            "retained-roots": 101,
+            "lookup-checksum": 500249980,
+            "iteration-checksum": [
+              99509499,
+              49513498
+            ]
+          },
+          {
+            "backend": "bifurcan-intmap-clojure-proxy",
+            "milliseconds": {
+              "build": 31.401889,
+              "retained-forks": 20.321387,
+              "batch": 16.039009,
+              "lookup": 42.816545,
+              "reduce-kv": 15.819667
+            },
+            "validated": true,
+            "retained-roots": 101,
+            "lookup-checksum": 500249980,
+            "iteration-checksum": [
+              99509499,
+              49513498
+            ]
+          }
+        ]
+      },
+      {
+        "round": 1,
+        "samples": [
+          {
+            "backend": "bifurcan-intmap-clojure-proxy",
+            "milliseconds": {
+              "build": 2.612507,
+              "retained-forks": 11.938739,
+              "batch": 11.435114,
+              "lookup": 46.18078,
+              "reduce-kv": 6.960981
+            },
+            "validated": true,
+            "retained-roots": 101,
+            "lookup-checksum": 500249980,
+            "iteration-checksum": [
+              99509499,
+              49513498
+            ]
+          },
+          {
+            "backend": "clojure-persistent-map",
+            "milliseconds": {
+              "build": 3.97786,
+              "retained-forks": 3.068067,
+              "batch": 2.679198,
+              "lookup": 16.090189,
+              "reduce-kv": 2.123508
+            },
+            "validated": true,
+            "retained-roots": 101,
+            "lookup-checksum": 500249980,
+            "iteration-checksum": [
+              99509499,
+              49513498
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "backend-recommendation": "Keep Clojure persistent maps as default. The second alternating-order round favored them for updates/read/iteration through these interfaces. The first round differs; no warmup, isolated GC or statistical controls justify a general Bifurcan performance conclusion. Proxy costs warrant future measurement.",
+  "source-sha256": {
+    "README.md": "d6cd8fd08ef6ca251c6a1550da891be0bae4d7dd0b6682171be714facdaefd9d",
+    "deps.edn": "f5219bd4b8602844c327d2dbe77ddc8053570959c4f58783f49bf002a6dc100a",
+    "modules/llvm/.gitignore": "cc8c95199d81d07c2c962e12702de119e958af157a5b232015d4cc86d600b933",
+    "modules/llvm/README.md": "245073d383cd66b18050910526e7c08e17c727d2df3d97a82b6c2c082d1c9aaa",
+    "modules/llvm/bifurcan/pattern/llvm/benchmark.clj": "d4efaab9a8abc6dc84908801acb88c0d1872c4e30aca60301858586b60db1e40",
+    "modules/llvm/bifurcan/pattern/llvm/bifurcan.clj": "28f85336a8ce5ec7f41f7ddb9e9012821a2d3c9ec10bece2bc2ef4da2521333c",
+    "modules/llvm/deps.edn": "85c69301f99a0c5c018a34295dc8d2828b0b47f9f3db3cc1d6b4962e24907b6f",
+    "modules/llvm/native/bridge.cpp": "fedbd1c13ab9b16c4cae3103fa8c7e64821663974391f04d01d2b0c97640b1be",
+    "modules/llvm/native/build.py": "caa454494e4d4cf69888a478d09259d821337d9c7abf58775274d14327bb9a86",
+    "modules/llvm/src/pattern/llvm/graph.clj": "8ba214a1f8a3b8cb053f2c9dccd9b5775670714336961c692c8092b5af0a821a",
+    "modules/llvm/src/pattern/llvm.clj": "6ad574ccbefbabea7f6a765c7546d6bda11e8506bf1e2c89a8e66f1b118ffc5d",
+    "modules/llvm/test/fixtures/graph.ll": "9e3453fd6da38efdcb5c61a8d6a7278c281c9a86363285bede8773e2d587573e",
+    "modules/llvm/test/fixtures/names.ll": "996be83ae7a431ec14424d49ef42500f9218c9b6667a47de7d0687dba87f2d9d",
+    "modules/llvm/test/pattern/llvm/bifurcan_test.clj": "b230189c5d65807905002e48bb477ec69ad72f8194c4911779b2d7fe4271f8f8",
+    "modules/llvm/test/pattern/llvm/graph_test.clj": "bf11118a3a2d2c2a4e8d39c8bc390d60d9e51fc9c5a51ff4ac9a8c618e25e167",
+    "modules/llvm/test/pattern/llvm/integration_test.clj": "afe87dffd58668a1b6676dfc1be81f0cc8dc42f62553bc0198f3f4e8f9f50e7a",
+    "modules/llvm/test/pattern/llvm/test_runner.clj": "d9a4c34d0de664f426112aeacb41570e175a5e05a26e9a5d887954f6055405f4"
+  },
+  "local-artifact-sha256": {
+    "modules/llvm/target/final-tests.log": "7b4208d43daab4469cc14be07bf98097b99af01b68fa15f8ed6ab71a921f500d",
+    "modules/llvm/target/final-tests.json": "c642b7d77ef32d2bde403b06edac1cfdec1a3aa383dcdbaa147438407e2d5dae",
+    "modules/llvm/target/core-regression.log": "90b74b92be649f5488c435a2ee2874f5c0c9d8a142505c30d120fa6b5a9be6e6",
+    "modules/llvm/target/core-regression.json": "4b83b5d4dacda69e131a56306571be31c371584645713a94464deb7bb2d22b9d",
+    "modules/llvm/target/storage-comparison-v2.log": "d3e473283fb40aac032b44761446c4f02ccbb5f32fd34bcee0c225c63faaee36",
+    "modules/llvm/target/storage-comparison-v2.json": "afbb0325642ebec14f233ea37f970086df33321181fcc679ea222d48da3ac088",
+    "modules/llvm/target/scale-probe/probe.clj": "b443e7e60febaa69a91606504a00862020cc297a343bbd2cfc815731ae6ee091",
+    "modules/llvm/target/scale-probe/chain.ll": "5f33042e9b12b8c403df6fa078f7859579f0bcbe04ed1c7ee5d9498a1c8f9207",
+    "modules/llvm/target/scale-probe/edited.ll": "346425d95996c7bd1f557e1c31b8ce81d0dd3a267c84943999eb8ea9fb2c609b",
+    "modules/llvm/target/scale-probe/observation.json": "5a548120d4b11fb9b834a3630ca384435ceecf1b3c1fa728e78f4047d7ad9dcc",
+    "modules/llvm/target/scale-probe/process.json": "462a0f2e8aaadefb511faf2583e75cea220e1e4bc770029cf27724a9c9a34a91",
+    "modules/llvm/target/bridge": "1bb95cd314cb3561609a2a91940813d02d40ed33b386340c3f11047c3760fab8"
+  },
+  "native-author-checks": "Native author additionally exercised ifunc/alias, parser/pins, byte names/header strings, source/context normalization, exclusive publication and failed-build preservation; the tracked JVM integration suite is the reproducible acceptance gate.",
+  "limits": [
+    "Optional source module, not a released Maven artifact or Lean runtime dependency.",
+    "LLVM IR only: no MIR/MLIR adapter, generic metadata graph, general construction/deletion/CFG edit, ORC JIT or codegen API.",
+    "Canonical capsule preserves unmodeled fields; normalized/editable coverage is partial and explicitly advertised.",
+    "LLVM verification establishes module validity, not semantic equivalence or proof preservation.",
+    "Persistent host data only; no durable store/execution checkpoint/host-effect rollback.",
+    "Resource guard limited process group RSS, wall time and system memory; parser memory/final file size are not independently capped by the library.",
+    "Actual 5000-instruction observation and synthetic10k-node table workload are bounded cold examples, not compiler/large-module/peak-memory benchmark comparisons."
+  ]
+}

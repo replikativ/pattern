@@ -1,0 +1,712 @@
+{:string-convention
+ "UTF8 field or field-bytes-hex; identifier presentation only",
+ :common-conditional-fields ["name" "name-bytes-hex"],
+ :format "pattern.llvm.capabilities/2",
+ :edits-format "pattern.llvm.edits/2",
+ :graph-format "pattern.llvm.graph/2",
+ :limitations
+ ["metadata/debug semantics remain in assembly capsule; opaque text inventories exposed"
+  "inspection is not semantic completeness"
+  "nested constant IR fallback can expand aggregates"
+  "rare generic constants retain ordered User operands and opaque IR fallback"
+  "operand editing restricted to declared policies and verifier"],
+ :type-projections
+ {:target-ext ["name" "type-parameters" "integer-parameters"],
+  :float ["bits" "semantics"],
+  :vector ["count" "scalable"],
+  :array ["count"],
+  :function ["varargs"],
+  :common ["id" "kind" "ir" "elements"],
+  :integer ["bits"],
+  :pointer ["address-space"],
+  :struct ["packed" "opaque" "name"]},
+ :node-projections
+ {:constant-int ["value" "unsigned-value" "bits" "bits-hex"],
+  :constant-float ["bits" "bits-hex" "semantics"],
+  :block ["parent" "instructions"],
+  :constant-struct [],
+  :ifunc ["resolver"],
+  :constant-array [],
+  :global
+  ["initializer" "constant" "thread-local" "thread-local-mode"],
+  :constant-data-array
+  ["element-type" "element-bits" "count" "encoding" "data-hex"],
+  :constant-vector [],
+  :inline-asm
+  ["asm"
+   "constraints"
+   "dialect"
+   "side-effects"
+   "align-stack"
+   "can-throw"
+   "function-type"],
+  :constant-expr
+  ["opcode"
+   "operator-raw-flags"
+   "nuw"
+   "nsw"
+   "exact"
+   "source-element-type"
+   "result-element-type"
+   "inbounds"
+   "nusw"],
+  :function
+  ["arguments"
+   "blocks"
+   "attributes"
+   "attribute-records"
+   "calling-convention"
+   "declaration"],
+  :argument ["parent" "index"],
+  :global-value
+  ["value-type"
+   "linkage"
+   "visibility"
+   "address-space"
+   "unnamed-address"
+   "dll-storage"
+   "dso-local"],
+  :alias ["aliasee"],
+  :constant-data-vector
+  ["element-type" "element-bits" "count" "encoding" "data-hex"],
+  :block-address ["function" "block"]},
+ :common-node-fields ["id" "kind" "type" "operands" "ir"],
+ :module-projection-fields
+ ["source-filename"
+  "target-triple"
+  "data-layout"
+  "functions"
+  "globals"
+  "aliases"
+  "ifuncs"
+  "named-metadata"],
+ :global-object-fields
+ ["metadata-attachments" "section" "alignment" "comdat"],
+ :metadata-projection
+ "opaque attachment/named-metadata/debug-record text inventory; no typed graph",
+ :snapshot-format "pattern.llvm.snapshot/2",
+ :profile-id "llvm21-persistent-ir/2",
+ :common-instruction-fields
+ ["opcode"
+  "parent"
+  "successors"
+  "metadata-attachments"
+  "debug-records"],
+ :wire-format "pattern.llvm/2",
+ :attribute-kinds
+ ["enum" "int" "type" "string" "range" "range-list" "opaque"],
+ :opcodes
+ [{:conditional-fields [],
+   :family "terminator",
+   :fields [],
+   :id 1,
+   :opcode "ret",
+   :operand-edit-policy "return-value",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields ["condition"],
+   :family "terminator",
+   :fields ["conditional"],
+   :id 2,
+   :opcode "br",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "terminator",
+   :fields ["condition" "default" "cases"],
+   :id 3,
+   :opcode "switch",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "terminator",
+   :fields [],
+   :id 4,
+   :opcode "indirectbr",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "terminator",
+   :fields
+   ["callee"
+    "arguments"
+    "function-type"
+    "calling-convention"
+    "attributes"
+    "attribute-records"
+    "operand-bundles"
+    "callee-slot"
+    "argument-slots"],
+   :id 5,
+   :opcode "invoke",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "terminator",
+   :fields [],
+   :id 6,
+   :opcode "resume",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "terminator",
+   :fields [],
+   :id 7,
+   :opcode "unreachable",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields ["unwind-destination"],
+   :family "terminator",
+   :fields ["cleanup-pad" "unwinds-to-caller"],
+   :id 8,
+   :opcode "cleanupret",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "terminator",
+   :fields ["catch-pad"],
+   :id 9,
+   :opcode "catchret",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["unwind-destination"],
+   :family "terminator",
+   :fields ["parent-pad" "handlers" "unwinds-to-caller"],
+   :id 10,
+   :opcode "catchswitch",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "terminator",
+   :fields
+   ["callee"
+    "arguments"
+    "function-type"
+    "calling-convention"
+    "attributes"
+    "attribute-records"
+    "operand-bundles"
+    "callee-slot"
+    "argument-slots"],
+   :id 11,
+   :opcode "callbr",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "unary",
+   :fields [],
+   :id 12,
+   :opcode "fneg",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields ["nuw" "nsw"],
+   :id 13,
+   :opcode "add",
+   :operand-edit-policy "integer-binop",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "binary",
+   :fields [],
+   :id 14,
+   :opcode "fadd",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields ["nuw" "nsw"],
+   :id 15,
+   :opcode "sub",
+   :operand-edit-policy "integer-binop",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "binary",
+   :fields [],
+   :id 16,
+   :opcode "fsub",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields ["nuw" "nsw"],
+   :id 17,
+   :opcode "mul",
+   :operand-edit-policy "integer-binop",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "binary",
+   :fields [],
+   :id 18,
+   :opcode "fmul",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields ["exact"],
+   :id 19,
+   :opcode "udiv",
+   :operand-edit-policy "integer-binop",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields ["exact"],
+   :id 20,
+   :opcode "sdiv",
+   :operand-edit-policy "integer-binop",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "binary",
+   :fields [],
+   :id 21,
+   :opcode "fdiv",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields [],
+   :id 22,
+   :opcode "urem",
+   :operand-edit-policy "integer-binop",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields [],
+   :id 23,
+   :opcode "srem",
+   :operand-edit-policy "integer-binop",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "binary",
+   :fields [],
+   :id 24,
+   :opcode "frem",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields ["nuw" "nsw"],
+   :id 25,
+   :opcode "shl",
+   :operand-edit-policy "integer-binop",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields ["exact"],
+   :id 26,
+   :opcode "lshr",
+   :operand-edit-policy "integer-binop",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields ["exact"],
+   :id 27,
+   :opcode "ashr",
+   :operand-edit-policy "integer-binop",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields [],
+   :id 28,
+   :opcode "and",
+   :operand-edit-policy "integer-binop",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields ["disjoint"],
+   :id 29,
+   :opcode "or",
+   :operand-edit-policy "integer-binop",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "binary",
+   :fields [],
+   :id 30,
+   :opcode "xor",
+   :operand-edit-policy "integer-binop",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "memory",
+   :fields ["allocated-type" "alignment" "address-space"],
+   :id 31,
+   :opcode "alloca",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "memory",
+   :fields
+   ["volatile"
+    "alignment"
+    "ordering"
+    "ordering-name"
+    "sync-scope"
+    "sync-scope-name"],
+   :id 32,
+   :opcode "load",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "memory",
+   :fields
+   ["volatile"
+    "alignment"
+    "ordering"
+    "ordering-name"
+    "sync-scope"
+    "sync-scope-name"],
+   :id 33,
+   :opcode "store",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "memory",
+   :fields
+   ["source-element-type"
+    "result-element-type"
+    "indices"
+    "pointer-slot"
+    "index-slots"
+    "inbounds"
+    "nusw"
+    "nuw"],
+   :id 34,
+   :opcode "getelementptr",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "memory",
+   :fields ["ordering" "ordering-name" "sync-scope" "sync-scope-name"],
+   :id 35,
+   :opcode "fence",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "memory",
+   :fields
+   ["volatile"
+    "weak"
+    "alignment"
+    "success-ordering"
+    "success-ordering-name"
+    "failure-ordering"
+    "failure-ordering-name"
+    "sync-scope"
+    "sync-scope-name"],
+   :id 36,
+   :opcode "cmpxchg",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "memory",
+   :fields
+   ["volatile"
+    "alignment"
+    "operation"
+    "operation-name"
+    "ordering"
+    "ordering-name"
+    "sync-scope"
+    "sync-scope-name"],
+   :id 37,
+   :opcode "atomicrmw",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields ["nuw" "nsw"],
+   :id 38,
+   :opcode "trunc",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields ["nonneg"],
+   :id 39,
+   :opcode "zext",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields [],
+   :id 40,
+   :opcode "sext",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields [],
+   :id 41,
+   :opcode "fptoui",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields [],
+   :id 42,
+   :opcode "fptosi",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields ["nonneg"],
+   :id 43,
+   :opcode "uitofp",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields [],
+   :id 44,
+   :opcode "sitofp",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "cast",
+   :fields [],
+   :id 45,
+   :opcode "fptrunc",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "cast",
+   :fields [],
+   :id 46,
+   :opcode "fpext",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields [],
+   :id 47,
+   :opcode "ptrtoint",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields [],
+   :id 48,
+   :opcode "inttoptr",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields [],
+   :id 49,
+   :opcode "bitcast",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "cast",
+   :fields [],
+   :id 50,
+   :opcode "addrspacecast",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "funclet-pad",
+   :fields ["parent-pad" "arguments"],
+   :id 51,
+   :opcode "cleanuppad",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "funclet-pad",
+   :fields ["parent-pad" "arguments"],
+   :id 52,
+   :opcode "catchpad",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "compare",
+   :fields ["predicate" "same-sign"],
+   :id 53,
+   :opcode "icmp",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "compare",
+   :fields ["predicate"],
+   :id 54,
+   :opcode "fcmp",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "other",
+   :fields ["incoming"],
+   :id 55,
+   :opcode "phi",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "call",
+   :fields
+   ["callee"
+    "arguments"
+    "function-type"
+    "calling-convention"
+    "attributes"
+    "attribute-records"
+    "operand-bundles"
+    "callee-slot"
+    "argument-slots"
+    "tail-kind"],
+   :id 56,
+   :opcode "call",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields ["fast-math"],
+   :family "other",
+   :fields [],
+   :id 57,
+   :opcode "select",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "internal-reserved",
+   :fields [],
+   :id 58,
+   :opcode "userop1",
+   :operand-edit-policy "none",
+   :projection "unsupported",
+   :serializable false}
+  {:conditional-fields [],
+   :family "internal-reserved",
+   :fields [],
+   :id 59,
+   :opcode "userop2",
+   :operand-edit-policy "none",
+   :projection "unsupported",
+   :serializable false}
+  {:conditional-fields [],
+   :family "other",
+   :fields [],
+   :id 60,
+   :opcode "va_arg",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "vector",
+   :fields [],
+   :id 61,
+   :opcode "extractelement",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "vector",
+   :fields [],
+   :id 62,
+   :opcode "insertelement",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}
+  {:conditional-fields [],
+   :family "vector",
+   :fields ["mask"],
+   :id 63,
+   :opcode "shufflevector",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "aggregate",
+   :fields ["indices"],
+   :id 64,
+   :opcode "extractvalue",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "aggregate",
+   :fields ["indices"],
+   :id 65,
+   :opcode "insertvalue",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "other",
+   :fields ["cleanup" "clauses"],
+   :id 66,
+   :opcode "landingpad",
+   :operand-edit-policy "none",
+   :projection "operation-fields",
+   :serializable true}
+  {:conditional-fields [],
+   :family "other",
+   :fields [],
+   :id 67,
+   :opcode "freeze",
+   :operand-edit-policy "none",
+   :projection "structural",
+   :serializable true}],
+ :record-projections
+ {:attribute ["kind" "ir" "name" "value" "type" "range" "ranges"],
+  :comdat ["name" "selection-kind"],
+  :landingpad-clause ["kind" "value"],
+  :metadata-attachment ["kind-id" "kind-name" "ir"],
+  :named-metadata ["name" "ir"],
+  :operand-bundle ["tag" "inputs" "input-slots"],
+  :fast-math ["reassoc" "nnan" "ninf" "nsz" "arcp" "contract" "afn"],
+  :attribute-position ["position" "index" "attributes"],
+  :phi-incoming ["value" "block"],
+  :switch-case ["value" "block" "value-slot" "block-slot"],
+  :constant-range
+  ["bits" "lower-bits-hex" "upper-bits-hex" "full" "empty"]}}

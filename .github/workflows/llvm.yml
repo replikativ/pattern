@@ -1,0 +1,72 @@
+name: Optional LLVM 21 acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'modules/llvm/**'
+      - 'src/**'
+      - 'resources/**'
+      - 'deps.edn'
+      - 'build.clj'
+      - '.github/workflows/llvm.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  llvm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      LLVM_CONFIG: llvm-config-21
+      CXX: clang++-21
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install signed LLVM 21 packages and Java 21
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --proto '=https' \
+            https://apt.llvm.org/llvm-snapshot.gpg.key -o "$RUNNER_TEMP/llvm-key.asc"
+          # Published primary fingerprint: https://apt.llvm.org/
+          fingerprint=$(gpg --batch --show-keys --with-colons "$RUNNER_TEMP/llvm-key.asc" |
+            awk -F: '$1 == "fpr" { print $10; exit }')
+          test "$fingerprint" = 6084F3CF814B57C1CF12EFD515CF4D18AF4F7421
+          sudo install -m 644 "$RUNNER_TEMP/llvm-key.asc" /usr/share/keyrings/llvm21.asc
+          echo 'deb [signed-by=/usr/share/keyrings/llvm21.asc] https://apt.llvm.org/noble/ llvm-toolchain-noble-21 main' |
+            sudo tee /etc/apt/sources.list.d/llvm21.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            llvm-21 llvm-21-dev clang-21 openjdk-21-jdk-headless
+          echo 'JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64' >> "$GITHUB_ENV"
+          echo '/usr/lib/jvm/java-21-openjdk-amd64/bin' >> "$GITHUB_PATH"
+      - name: Install checksum-pinned official Clojure CLI archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          # Archive digest published by clojure/homebrew-tools/Formula/clojure.rb.
+          version=1.12.6.1673
+          archive="clojure-tools-$version.tar.gz"
+          curl --fail --silent --show-error --location --proto '=https' \
+            "https://github.com/clojure/brew-install/releases/download/$version/$archive" -o "$archive"
+          echo "fe9194858e75d5af13c2e2aff92d710674d5bc5105f2b42f90a7d94d82ec023c  $archive" | sha256sum --check --strict
+          tar xzf "$archive"
+          prefix="$RUNNER_TEMP/clojure-cli"
+          mkdir -p "$prefix/libexec" "$prefix/bin"
+          install -m 644 clojure-tools/deps.edn clojure-tools/example-deps.edn clojure-tools/tools.edn "$prefix/"
+          install -m 644 clojure-tools/exec.jar "clojure-tools/clojure-tools-$version.jar" "$prefix/libexec/"
+          sed "s@PREFIX@$prefix@g" clojure-tools/clojure > "$prefix/bin/clojure"
+          chmod 755 "$prefix/bin/clojure"
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+      - name: Build and validate optional module and package separation
+        run: python3 modules/llvm/scripts/ci.py
+      - name: Show bounded acceptance receipt
+        if: always()
+        run: |
+          if test -f modules/llvm/target/ci/receipt.json; then
+            head -c 32768 modules/llvm/target/ci/receipt.json
+          fi

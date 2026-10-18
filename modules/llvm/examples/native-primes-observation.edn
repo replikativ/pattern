@@ -1,0 +1,25 @@
+{:format "pattern.llvm.native-primes/1",
+ :native-executables ["primes-unoptimized" "primes"],
+ :baseline-instructions 66,
+ :source-sha256
+ "ce1b096d02396babad6dffeeacee418f96908884e85e4972963e4fa3b0bcbefd",
+ :llvm-version "21.1.2",
+ :optimized-instructions 75,
+ :performance-comparison-claimed false,
+ :compiler-sha256
+ "dfdb51208ac2d6e7f9cfa1f6e7ecf2a37d7f9959559cf4551c1246652176bc32",
+ :semantic-probes
+ {:cases 8, :results [-5 5 10 -9223372036854775808 -12 -3 -2 12]},
+ :unsupported-source-rejections 7,
+ :pattern-edit-count 10,
+ :results
+ [{:limit -10, :prime-count 0, :prime-sum 0}
+  {:limit 0, :prime-count 0, :prime-sum 0}
+  {:limit 1, :prime-count 0, :prime-sum 0}
+  {:limit 2, :prime-count 1, :prime-sum 2}
+  {:limit 3, :prime-count 2, :prime-sum 5}
+  {:limit 10, :prime-count 4, :prime-sum 17}
+  {:limit 100, :prime-count 25, :prime-sum 1060}
+  {:limit 1000, :prime-count 168, :prime-sum 76127}
+  {:limit 10000, :prime-count 1229, :prime-sum 5736396}
+  {:limit 100000, :prime-count 9592, :prime-sum 454396537}]}
