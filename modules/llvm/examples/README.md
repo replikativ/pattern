@@ -52,7 +52,8 @@ compiler probes check parallel `recur`, nested loops, binding scope, signed
 division/remainder, wrapping overflow, bit operations and comparisons. Seven source
 forms outside the subset are explicitly rejected. The checked-in
 [observation](native-primes-observation.edn) records the local run; these checks
-are an explicitly invoked example, separate from the module's normal test runner.
+are separate from the module's normal test runner. The opt-in LLVM acceptance CI
+also runs this complete example, including native builds and differential checks.
 
 ## Supported source and semantics
 
@@ -60,6 +61,9 @@ are an explicitly invoked example, separate from the module's normal test runner
 vector of simple, single-arity, single-body `defn` forms and returns LLVM assembly
 without evaluating them. The example runner separately loads the trusted
 repository-owned Clojure program and evaluates fixed semantic probes as references.
+The frontend is a handwritten emitter, rather than a Pattern nanopass pipeline;
+Pattern performs the persistent LLVM graph rewrite afterward. See the
+[compiler-author guide](../COMPILERS.md) for the intended dialect/pass architecture.
 
 - All function arguments, function results and loop variables are signed 64-bit
   integers. Integer literals must be Clojure `Long` values; explicit BigInt (`N`)

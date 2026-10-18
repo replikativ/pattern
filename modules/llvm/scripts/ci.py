@@ -58,8 +58,8 @@ def consumer_smoke():
                            PATTERN_LLVM_OUTPUT=str(directory / "edited.ll"))
         smoke = r'''
 (require '[pattern :as pattern] '[pattern.llvm :as llvm] '[pattern.llvm.graph :as graph])
-(let [base (llvm/import-file (System/getenv "PATTERN_LLVM_BRIDGE")
-                            (System/getenv "PATTERN_LLVM_FIXTURE"))
+(let [base (llvm/import-assembly (System/getenv "PATTERN_LLVM_BRIDGE")
+                                (slurp (System/getenv "PATTERN_LLVM_FIXTURE") :encoding "UTF-8"))
       named (fn [s n] (first (filter #(= n (:name %)) (vals (:nodes s)))))
       identity (named base "identity") answer (named base "answer")
       match (pattern/compile-pattern '{:kind "instruction" :opcode "add"})
@@ -76,6 +76,27 @@ def consumer_smoke():
 '''
         run(["clojure", "-Srepro", "-J-Xmx512m", "-J-Xss4m", "-M", "-e", smoke],
             cwd=directory, env=environment)
+
+
+def native_example():
+    # Exercise the actual compiler/emitter -> in-memory LLVM -> Pattern -> native
+    # path, separately from the graph test runner. Do not retain binaries in Git.
+    with tempfile.TemporaryDirectory(prefix="pattern-native-example-") as temporary:
+        environment = dict(os.environ,
+                           PATTERN_NATIVE_EXAMPLE_OUTPUT=str(Path(temporary) / "compiled"))
+        smoke = r'''
+(load-file "modules/llvm/examples/run.clj")
+(let [result (pattern.llvm.examples.run/run! (System/getenv "PATTERN_NATIVE_EXAMPLE_OUTPUT"))]
+  (assert (= 10 (count (:results result))))
+  (assert (= 8 (get-in result [:semantic-probes :cases])))
+  (assert (= 7 (:unsupported-source-rejections result)))
+  (println {:native-example :passed :limits (count (:results result))
+            :semantic-probes (:semantic-probes result)
+            :source-rejections (:unsupported-source-rejections result)}))
+(shutdown-agents)
+'''
+        run(["clojure", "-Srepro", "-J-Xmx384m", "-J-Xss4m", "-M:llvm", "-e", smoke],
+            env=environment)
 
 
 def package_separation():
@@ -135,6 +156,8 @@ def main():
             run(["clojure", "-Srepro", "-J-Xmx512m", "-J-Xss4m", aliases]
                 + (["bifurcan"] if optional else []))
             receipt["completed"].append("bifurcan-suite" if optional else "default-suite")
+        native_example()
+        receipt["completed"].append("native-compiler-example")
         consumer_smoke()
         receipt["completed"].append("external-local-root-consumer")
         receipt["package"] = package_separation()

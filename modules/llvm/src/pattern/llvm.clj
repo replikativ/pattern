@@ -81,6 +81,21 @@
      (fn [directory]
        (graph/from-wire (read-result (run! [bridge "import" path] directory options)))))))
 
+(defn import-assembly
+  "Import LLVM assembly produced in memory by a compiler/emitter. LLVM parses and
+   verifies it through the same profile as import-file. No source code is executed.
+   The private UTF-8 source file is removed before this function returns. Emit an
+   explicit stable source_filename for repeatable module/graph identity."
+  ([bridge assembly] (import-assembly bridge assembly {}))
+  ([bridge assembly options]
+   (when-not (string? assembly)
+     (throw (ex-info "LLVM assembly must be a string" {})))
+   (with-directory
+     (fn [directory]
+       (let [input (io/file directory "emitted.ll")]
+         (spit input assembly :encoding "UTF-8")
+         (graph/from-wire (read-result (run! [bridge "import" input] directory options))))))))
+
 (defn export-file!
   "Apply the recorded edits to the complete original assembly in a fresh native
    context, verify, and exclusively create PATH. Other LLVM fields are preserved

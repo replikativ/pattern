@@ -72,7 +72,7 @@
         (check! (= expected (apply (ns-resolve *ns* (second definition)) arguments))
                 "Incorrect Clojure probe expectation" {:function (second definition)})))
     (spit source assembly :encoding "UTF-8")
-    (llvm/export-file! bridge (llvm/import-file bridge (str source)) (str output))
+    (llvm/export-file! bridge (llvm/import-assembly bridge assembly) (str output))
     (spit driver
           (str "#include <stdint.h>\n#include <inttypes.h>\n#include <stdio.h>\n"
                (str/join "\n" (for [[[_ name params]] semantic-probes]
@@ -105,7 +105,7 @@
         optimized (io/file directory "optimized.ll")
         plain-binary (io/file directory "primes-unoptimized") native-binary (io/file directory "primes")
         _ (spit source assembly :encoding "UTF-8")
-        base (llvm/import-file bridge (str source))
+        base (llvm/import-assembly bridge assembly)
         swap-add (pattern/rule '(?:as node {:kind "instruction" :opcode "add" :operands [?a ?b]})
                    (assoc node :operands [b a]))
         adds (sort-by :id (filter #(= "add" (:opcode %)) (vals (:nodes base))))

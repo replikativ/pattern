@@ -43,6 +43,23 @@
               (vals (:nodes snapshot))))
     (is (re-find #"distinct !\{!0" (get-in snapshot [:origin :assembly])))))
 
+(deftest compiler-assembly-entry-point
+  (let [snapshot (llvm/import-assembly bridge (slurp fixture :encoding "UTF-8"))]
+    (is (= (select-keys @imported [:nodes :types :module])
+           (select-keys snapshot [:nodes :types :module])))
+    (is (= (get-in @imported [:origin :graph-sha256]) (get-in snapshot [:origin :graph-sha256])))
+    (in-directory
+      (fn [directory]
+        (let [output (str (io/file directory "compiler-output.ll"))]
+          (is (= 0 (:edits (llvm/export-file! bridge snapshot output))))
+          (is (= 84 (:exit (shell/sh (tool-path "lli") output))))))))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"must be a string"
+        (llvm/import-assembly "/not-an-executable" nil)))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"rejected"
+        (llvm/import-assembly bridge "define i64 @invalid() { ret i32 0 }")))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"output limit"
+        (llvm/import-assembly bridge "define i64 @constant() { ret i64 7 }" {:max-output-bytes 1}))))
+
 (deftest native-verified-persistent-forks
   (in-directory
     (fn [directory]

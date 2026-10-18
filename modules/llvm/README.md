@@ -7,6 +7,10 @@ native version is **21.1.2**; this optional module requires
 JDK 17 or later. Pattern's normal source paths,
 dependencies and matcher implementation do not load this module.
 
+The [compiler-author guide](COMPILERS.md) explains how this fits Pattern dialects
+and nanopasses, Raster's prospective LLVM/MLIR targets, the existing AMD64
+experiments, and optional frontend/FFI/JIT choices.
+
 ```mermaid
 flowchart LR
   Input[LLVM assembly or bitcode] --> Parse[Optional LLVM 21 subprocess]
@@ -202,6 +206,9 @@ integration tests separately execute only their known fixture through `lli`.
 
 The module also has its own `deps.edn` for source consumers using a local root or
 Git `:deps/root "modules/llvm"`. No new Maven artifact is published by this work.
+Compiler emitters can pass their LLVM assembly strings directly to
+`llvm/import-assembly`; it uses the same validation and process options as file
+import. Emit a stable `source_filename` for repeatable module/graph identity.
 
 ## Native compilation example
 
@@ -255,7 +262,7 @@ acceptance or a current performance claim.
 
 The opt-in [LLVM CI workflow](../../.github/workflows/llvm.yml) builds against
 signed LLVM 21 packages, runs default and optional Bifurcan suites, checks a fresh
-external `:local/root` consumer, and builds the normal Pattern JAR to verify that
+native compiler example and external `:local/root` consumer, and builds the normal Pattern JAR to verify that
 LLVM code and optional dependencies remain excluded. Run it locally with:
 
 ```sh
@@ -268,12 +275,19 @@ currently use `-O0`, and the integration is a source module in the repository, n
 a published standalone Maven artifact. MIR, MLIR and pass-time adapters below
 remain future work and have no current import/export support.
 
-Current [profile `/2` acceptance](measurements/profile-v2-observation.json) records
+Initial [profile `/2` acceptance](measurements/profile-v2-observation.json) records
 23 tests / 234 assertions by default, 25 / 253 with Bifurcan, and the core regression
 suite's 88 / 622, all passing. It pins runtime/test source hashes and local artifacts,
 including checks that fixtures encounter all 65 serializable opcodes. The complete
 local acceptance job peaked at approximately 644 MiB process-group RSS; this is
 not a throughput or large-module memory claim.
+
+The subsequent [compiler API acceptance](measurements/compiler-api-observation.json)
+checks `import-assembly` and runs the native compiler example automatically. It
+records 24 tests / 241 assertions by default and 26 / 260 with Bifurcan, plus all
+10 example limits, 8 semantic probes, 7 source rejections, the external consumer
+and normal-JAR/POM separation. These source-pinned observations are separate from
+the earlier profile and performance measurements.
 
 ## Extending access across LLVM's representations
 

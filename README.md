@@ -9,6 +9,8 @@ It works on immutable persistent data, greatly simplifying development and debug
 
 An [optional LLVM data adapter](modules/llvm/README.md) experiments with persistent
 IR graphs and verified operand edits without adding LLVM to the core library.
+The [compiler-author guide](modules/llvm/COMPILERS.md) connects this to Pattern's
+dialects/nanopasses and compares prospective LLVM, MLIR and direct AMD64 targets.
 
 [Current release on Clojars](https://clojars.org/com.github.pangloss/pattern)
 
