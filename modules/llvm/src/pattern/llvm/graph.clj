@@ -1,6 +1,8 @@
 (ns pattern.llvm.graph
   "Persistent, normalized LLVM value/type graphs. IDs belong to one imported
    module lineage. Names are presentation; native pointers never escape."
+  (:require [clojure.set :as set]
+            [pattern.llvm.support :as support])
   (:import [java.nio.charset StandardCharsets]
            [java.security MessageDigest]
            [java.util HexFormat UUID]))
@@ -65,7 +67,7 @@
   "Digest of native graph records, baseline module semantics, version and coverage.
    Object keys are sorted; integer values and ordered arrays stay exact."
   [llvm-version coverage module nodes types]
-  (sha256 (canonical-json {:format "pattern.llvm.graph/1" :llvm-version llvm-version
+  (sha256 (canonical-json {:format (:graph-format support/schemas) :llvm-version llvm-version
                            :coverage coverage :module module
                            :nodes (vec (sort-by :id nodes))
                            :types (vec (sort-by :id types))})))
@@ -82,17 +84,19 @@
    remain distinct, including loops. Text fields describe the imported baseline;
    subsequent edits are explicit data, not implicit textual substitutions."
   [{:keys [format llvm-version module nodes types coverage graph-sha256]}]
-  (require! (= "pattern.llvm/1" format) "Unsupported LLVM wire format" {:format format})
+  (require! (= (:wire-format support/schemas) format) "Unsupported LLVM wire format" {:format format})
   (require! (and (string? llvm-version) (.startsWith ^String llvm-version "21."))
             "This fidelity profile requires LLVM 21" {:llvm-version llvm-version})
   (require! (string? (:assembly module)) "Missing canonical module assembly" {})
   (require! (and (map? coverage) (true? (:assembly-capsule coverage))
                  (string? graph-sha256)) "Missing fidelity declaration or graph digest" {})
+  (support/validate-coverage! coverage llvm-version)
   (require! (= graph-sha256 (baseline-digest llvm-version coverage
                              (dissoc module :assembly :identifier) nodes types))
             "Native baseline graph digest mismatch" {})
   (let [types (table types :types)
         nodes (table (mapv #(-> % (assoc :original-ir (:ir %)) (dissoc :ir)) nodes) :nodes)]
+    (support/validate-instructions! coverage nodes)
     (doseq [[id node] nodes]
       (require! (and (contains? types (:type node)) (vector? (:operands node)))
                 "Malformed value type or operand vector" {:id id})
@@ -107,7 +111,7 @@
           base {:module (dissoc module :assembly :identifier) :nodes nodes :types types}
           indexes {:uses (operand-sites nodes) :predecessors (predecessors nodes)}]
       (merge base indexes
-             {:format "pattern.llvm.snapshot/1" :id (str (UUID/randomUUID))
+             {:format (:snapshot-format support/schemas) :id (str (UUID/randomUUID))
               :llvm-version llvm-version :edits []
               :coverage coverage
               :origin {:sha256 (sha256 assembly) :assembly assembly :base base
@@ -124,10 +128,6 @@
   "Return #{[terminator-id successor-index]}; parallel CFG edges are distinct."
   [snapshot block] (get (:predecessors snapshot) block #{}))
 
-(def editable-opcodes
-  #{"add" "sub" "mul" "and" "or" "xor" "shl" "lshr" "ashr"
-    "udiv" "sdiv" "urem" "srem" "ret"})
-
 (defn set-operand
   "Return a new snapshot; do not mutate any prior snapshot. Only existing values
    of the same native type may be used. Native verification at export still must
@@ -136,7 +136,7 @@
   (let [instruction (node snapshot user) replacement (node snapshot target)
         operands (:operands instruction)]
     (require! (and (= "instruction" (:kind instruction))
-                   (contains? editable-opcodes (:opcode instruction)))
+                   (seq (:editable-operand-slots (support/node-support snapshot user))))
               "Opcode is not editable in this profile" {:user user :opcode (:opcode instruction)})
     (require! (and (integer? slot) (<= 0 slot) (< slot (count operands)))
               "Operand index out of range" {:user user :slot slot})
@@ -162,18 +162,46 @@
    if any user is unsupported; callers keep their unchanged input on failure.
    This does not replace PHI predecessor blocks or metadata-only references."
   [snapshot old target]
-  (reduce (fn [current [user slot]] (set-operand current user slot target))
-          snapshot (sort (uses snapshot old))))
+  (let [result (reduce (fn [current [user slot]] (set-operand current user slot target))
+                       snapshot (sort (uses snapshot old)))]
+    (if (identical? result snapshot) snapshot (assoc result :parent (:id snapshot)))))
+
+(defn rewrite-node
+  "Apply a Pattern rule (or pure node->node function) as one persistent edit
+   transaction. Only existing operand slots may differ; other changes fail with
+   explicit fields. A Pattern rule that does not match returns the original node.
+   The function's external effects, if any, are not rolled back on failure."
+  [snapshot id rewrite]
+  (let [before (node snapshot id)]
+    (require! before "Unknown node ID" {:node id})
+    (require! (ifn? rewrite) "Expected a node rewrite function" {:node id})
+    (let [after (rewrite before)]
+      (require! (map? after) "Node rewrite must return a node map" {:node id})
+      (if (= before after)
+        snapshot
+        (let [changed (->> (set/union (set (keys before)) (set (keys after)))
+                           (remove #(= (get before % ::absent) (get after % ::absent)))
+                           set)
+              unsupported (disj changed :operands)]
+          (require! (empty? unsupported) "Node rewrite changes unsupported fields"
+                    {:node id :unsupported-fields unsupported})
+          (require! (and (vector? (:operands after))
+                         (= (count (:operands before)) (count (:operands after))))
+                    "Node rewrite cannot add or remove operand slots" {:node id})
+          (let [result (reduce (fn [current [slot target]] (set-operand current id slot target))
+                               snapshot (map-indexed vector (:operands after)))]
+            (assoc result :parent (:id snapshot))))))))
 
 (defn export-request
   "Reject direct graph/type/module/derived-index mutations outside the admitted
    operand edit API. Return a source-bound patch, checked again by native LLVM."
   [snapshot]
   (let [{:keys [assembly sha256 base llvm-version coverage graph-sha256]} (:origin snapshot)
-        _ (require! (and (= "pattern.llvm.snapshot/1" (:format snapshot))
+        _ (require! (and (= (:snapshot-format support/schemas) (:format snapshot))
                          (= llvm-version (:llvm-version snapshot))
                          (= coverage (:coverage snapshot))) "Snapshot profile changed" {})
         _ (require! (= sha256 (pattern.llvm.graph/sha256 assembly)) "Origin assembly changed" {})
+        _ (support/validate-coverage! coverage llvm-version)
         original-nodes (mapv #(-> % (assoc :ir (:original-ir %)) (dissoc :original-ir))
                             (vals (:nodes base)))
         _ (require! (every? #(not (contains? % :ir)) (vals (:nodes base)))
@@ -181,7 +209,8 @@
         _ (require! (= graph-sha256 (baseline-digest llvm-version coverage
                                      (:module base) original-nodes (vals (:types base))))
                     "Origin graph changed outside the edit protocol" {})
-        initial (merge base {:uses (operand-sites (:nodes base))
+        initial (merge base {:coverage coverage :llvm-version llvm-version
+                             :uses (operand-sites (:nodes base))
                              :predecessors (predecessors (:nodes base)) :edits []})
         expected (reduce (fn [current {:keys [user slot from to]}]
                            (require! (= from (get-in current [:nodes user :operands slot]))
@@ -191,5 +220,5 @@
     (doseq [key [:module :nodes :types :uses :predecessors]]
       (require! (= (get expected key) (get snapshot key))
                 "Unrecorded or unsupported graph mutation" {:field key}))
-    {:format "pattern.llvm.edits/1" :source-sha256 sha256
+    {:format (:edits-format support/schemas) :source-sha256 sha256
      :llvm-version llvm-version :graph-sha256 graph-sha256 :edits (:edits snapshot)}))

@@ -2,6 +2,10 @@
 // expose LLVM Value identity and ordered operand edges, not a complete schema.
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/ConstantRange.h"
+#include "llvm/IR/InlineAsm.h"
+#include "llvm/IR/DebugProgramInstruction.h"
+#include "profile.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
@@ -111,8 +115,9 @@ static void canonicalJSON(raw_ostream &out, const json::Value &value) {
 }
 static json::Object coverage() {
   return json::Object{{"assembly-capsule", true}, {"value-operands", true},
-    {"typed-metadata", false}, {"debug-records", "assembly-capsule"},
-    {"container-ir", "operand-reference"}, {"constant-ir", "may-expand-nested-aggregates"}};
+    {"typed-metadata", false}, {"debug-records", "opaque-text-inventory-and-assembly-capsule"},
+    {"container-ir", "operand-reference"}, {"constant-ir", "may-expand-nested-aggregates"},
+    {"capabilities", pattern_llvm_profile::capabilities()}};
 }
 static std::string graphHash(const json::Object &records) {
   std::string bytes;
@@ -133,6 +138,11 @@ static std::string kind(const Value *value) {
   if (isa<ConstantInt>(value)) return "constant-int";
   if (isa<ConstantFP>(value)) return "constant-float";
   if (isa<ConstantExpr>(value)) return "constant-expr";
+  if (isa<ConstantDataArray>(value)) return "constant-data-array";
+  if (isa<ConstantDataVector>(value)) return "constant-data-vector";
+  if (isa<ConstantArray>(value)) return "constant-array";
+  if (isa<ConstantStruct>(value)) return "constant-struct";
+  if (isa<ConstantVector>(value)) return "constant-vector";
   if (isa<ConstantAggregateZero>(value)) return "constant-zero";
   if (isa<ConstantPointerNull>(value)) return "constant-null";
   if (isa<BlockAddress>(value)) return "block-address";
@@ -147,6 +157,7 @@ static std::string typeKind(Type *type) {
   if (type->isFloatingPointTy()) return "float";
   if (type->isPointerTy()) return "pointer";
   if (type->isStructTy()) return "struct";
+  if (type->isTargetExtTy()) return "target-ext";
   if (type->isArrayTy()) return "array";
   if (type->isVectorTy()) return "vector";
   if (type->isFunctionTy()) return "function";
@@ -156,6 +167,55 @@ static std::string typeKind(Type *type) {
   return "type";
 }
 
+static std::string apIntString(const APInt &value, unsigned radix, bool signedValue = false) {
+  SmallString<128> text;
+  value.toString(text, radix, signedValue);
+  return text.str().str();
+}
+static StringRef floatSemantics(Type *type) {
+  switch (type->getTypeID()) {
+  case Type::HalfTyID: return "ieee-half";
+  case Type::BFloatTyID: return "bfloat";
+  case Type::FloatTyID: return "ieee-single";
+  case Type::DoubleTyID: return "ieee-double";
+  case Type::X86_FP80TyID: return "x87-double-extended";
+  case Type::FP128TyID: return "ieee-quad";
+  case Type::PPC_FP128TyID: return "ppc-double-double";
+  default: return "unknown";
+  }
+}
+static json::Object rangeRecord(const ConstantRange &range) {
+  return json::Object{{"bits", range.getBitWidth()},
+    {"lower-bits-hex", apIntString(range.getLower(), 16)},
+    {"upper-bits-hex", apIntString(range.getUpper(), 16)},
+    {"full", range.isFullSet()}, {"empty", range.isEmptySet()}};
+}
+static void operatorFlags(json::Object &out, Value *value) {
+  if (auto *op = dyn_cast<OverflowingBinaryOperator>(value)) {
+    out["nuw"] = op->hasNoUnsignedWrap(); out["nsw"] = op->hasNoSignedWrap();
+  }
+  if (auto *op = dyn_cast<PossiblyExactOperator>(value)) out["exact"] = op->isExact();
+  if (auto *op = dyn_cast<FPMathOperator>(value)) {
+    FastMathFlags flags = op->getFastMathFlags();
+    out["fast-math"] = json::Object{{"reassoc", flags.allowReassoc()}, {"nnan", flags.noNaNs()},
+      {"ninf", flags.noInfs()}, {"nsz", flags.noSignedZeros()}, {"arcp", flags.allowReciprocal()},
+      {"contract", flags.allowContract()}, {"afn", flags.approxFunc()}};
+  }
+  if (auto *op = dyn_cast<PossiblyDisjointInst>(value)) out["disjoint"] = op->isDisjoint();
+  if (auto *op = dyn_cast<PossiblyNonNegInst>(value)) out["nonneg"] = op->hasNonNeg();
+  if (auto *op = dyn_cast<TruncInst>(value)) {
+    out["nuw"] = op->hasNoUnsignedWrap(); out["nsw"] = op->hasNoSignedWrap();
+  }
+}
+static void orderingFields(json::Object &out, StringRef key, AtomicOrdering ordering) {
+  out[key] = static_cast<int64_t>(ordering);
+  out[(key + "-name").str()] = toIRString(ordering);
+}
+static void scopeFields(json::Object &out, LLVMContext &context, SyncScope::ID scope) {
+  out["sync-scope"] = static_cast<int64_t>(scope);
+  if (auto name = context.getSyncScopeName(scope)) stringField(out, "sync-scope-name", *name);
+  else out["sync-scope-name"] = "unknown";
+}
 struct Graph {
   std::map<const Value *, ID> valueIDs;
   std::vector<Value *> values;
@@ -177,6 +237,11 @@ struct Graph {
     types.push_back(type); // Intern before traversing recursive struct types.
     return id;
   }
+  void internAttributes(AttributeList attributes) {
+    for (unsigned index : attributes.indexes())
+      for (Attribute attribute : attributes.getAttributes(index))
+        if (attribute.isTypeAttribute()) internType(attribute.getValueAsType());
+  }
   ID id(const Value *value) const { return valueIDs.at(value); }
   ID typeID(Type *type) const { return typeIDs.at(type); }
   explicit Graph(Module &module) {
@@ -194,13 +259,71 @@ struct Graph {
       internType(value->getType());
       if (auto *user = dyn_cast<User>(value))
         for (Value *operand : user->operands()) intern(operand);
-      if (auto *function = dyn_cast<Function>(value)) internType(function->getFunctionType());
+      if (auto *function = dyn_cast<Function>(value)) {
+        internType(function->getFunctionType()); internAttributes(function->getAttributes());
+      }
+      if (auto *call = dyn_cast<CallBase>(value)) {
+        internType(call->getFunctionType()); internAttributes(call->getAttributes());
+      }
+      if (auto *asmValue = dyn_cast<InlineAsm>(value)) internType(asmValue->getFunctionType());
       if (auto *global = dyn_cast<GlobalValue>(value)) internType(global->getValueType());
       if (auto *alloca = dyn_cast<AllocaInst>(value)) internType(alloca->getAllocatedType());
-      if (auto *gep = dyn_cast<GetElementPtrInst>(value)) internType(gep->getSourceElementType());
+      if (auto *gep = dyn_cast<GEPOperator>(value)) {
+        internType(gep->getSourceElementType()); internType(gep->getResultElementType());
+      }
     }
     for (size_t i = 0; i < types.size(); ++i)
       for (Type *child : types[i]->subtypes()) internType(child);
+  }
+  json::Array attributeRecords(AttributeList attributes) const {
+    json::Array records;
+    for (unsigned index : attributes.indexes()) {
+      json::Array values;
+      for (Attribute attribute : attributes.getAttributes(index)) {
+        json::Object row{{"ir", attribute.getAsString()}};
+        if (attribute.hasKindAsEnum())
+          stringField(row, "name", Attribute::getNameFromAttrKind(attribute.getKindAsEnum()));
+        if (attribute.isEnumAttribute()) row["kind"] = "enum";
+        else if (attribute.isIntAttribute()) {
+          row["kind"] = "int"; row["value"] = attribute.getValueAsInt();
+        } else if (attribute.isTypeAttribute()) {
+          row["kind"] = "type"; row["type"] = typeID(attribute.getValueAsType());
+        } else if (attribute.isStringAttribute()) {
+          row["kind"] = "string";
+          stringField(row, "name", attribute.getKindAsString());
+          stringField(row, "value", attribute.getValueAsString());
+        } else if (attribute.isConstantRangeAttribute()) {
+          row["kind"] = "range"; row["range"] = rangeRecord(attribute.getValueAsConstantRange());
+        } else if (attribute.isConstantRangeListAttribute()) {
+          row["kind"] = "range-list";
+          json::Array ranges;
+          for (const ConstantRange &range : attribute.getValueAsConstantRangeList()) ranges.push_back(rangeRecord(range));
+          row["ranges"] = std::move(ranges);
+        } else row["kind"] = "opaque";
+        values.push_back(std::move(row));
+      }
+      if (!values.empty()) records.push_back(json::Object{
+        {"position", index == AttributeList::FunctionIndex ? "function" : index == 0 ? "return" : "argument"},
+        {"index", index == AttributeList::FunctionIndex || index == 0 ? 0 : index - 1},
+        {"attributes", std::move(values)}});
+    }
+    return records;
+  }
+  template <typename Object> json::Array metadataAttachments(Object *object, Module *module) const {
+    SmallVector<std::pair<unsigned, MDNode *>, 8> attachments;
+    object->getAllMetadata(attachments);
+    SmallVector<StringRef, 32> names;
+    module->getContext().getMDKindNames(names);
+    json::Array records;
+    for (auto &attachment : attachments) {
+      std::string text;
+      raw_string_ostream stream(text);
+      attachment.second->print(stream, module);
+      json::Object row{{"kind-id", attachment.first}, {"ir", std::move(text)}};
+      stringField(row, "kind-name", attachment.first < names.size() ? names[attachment.first] : StringRef("unknown"));
+      records.push_back(std::move(row));
+    }
+    return records;
   }
   json::Object node(Value *value) const {
     json::Array operands;
@@ -214,6 +337,10 @@ struct Graph {
       out["value-type"] = typeID(global->getValueType());
       out["linkage"] = static_cast<int64_t>(global->getLinkage());
       out["visibility"] = static_cast<int64_t>(global->getVisibility());
+      out["address-space"] = global->getAddressSpace();
+      out["unnamed-address"] = static_cast<int64_t>(global->getUnnamedAddr());
+      out["dll-storage"] = static_cast<int64_t>(global->getDLLStorageClass());
+      out["dso-local"] = global->isDSOLocal();
     }
     if (auto *function = dyn_cast<Function>(value)) {
       json::Array args, blocks;
@@ -225,8 +352,32 @@ struct Graph {
       raw_string_ostream stream(attrs);
       function->getAttributes().print(stream);
       out["attributes"] = std::move(attrs);
+      out["attribute-records"] = attributeRecords(function->getAttributes());
       out["calling-convention"] = static_cast<int64_t>(function->getCallingConv());
       out["declaration"] = function->isDeclaration();
+    }
+    if (auto *object = dyn_cast<GlobalObject>(value)) {
+      out["metadata-attachments"] = metadataAttachments(object, object->getParent());
+      stringField(out, "section", object->getSection());
+      MaybeAlign alignment;
+      if (auto *function = dyn_cast<Function>(object)) alignment = function->getAlign();
+      if (auto *variable = dyn_cast<GlobalVariable>(object)) alignment = variable->getAlign();
+      if (alignment) out["alignment"] = static_cast<int64_t>(alignment->value());
+      else out["alignment"] = nullptr;
+      if (Comdat *comdat = object->getComdat()) {
+        json::Object row{{"selection-kind", static_cast<int64_t>(comdat->getSelectionKind())}};
+        nameField(row, comdat->getName()); out["comdat"] = std::move(row);
+      } else out["comdat"] = nullptr;
+    }
+    if (auto *global = dyn_cast<GlobalVariable>(value)) {
+      out["initializer"] = global->hasInitializer() ? json::Value(id(global->getInitializer())) : json::Value(nullptr);
+      out["constant"] = global->isConstant(); out["thread-local"] = global->isThreadLocal();
+      out["thread-local-mode"] = static_cast<int64_t>(global->getThreadLocalMode());
+    }
+    if (auto *alias = dyn_cast<GlobalAlias>(value)) out["aliasee"] = id(alias->getAliasee());
+    if (auto *ifunc = dyn_cast<GlobalIFunc>(value)) out["resolver"] = id(ifunc->getResolver());
+    if (auto *address = dyn_cast<BlockAddress>(value)) {
+      out["function"] = id(address->getFunction()); out["block"] = id(address->getBasicBlock());
     }
     if (auto *argument = dyn_cast<Argument>(value)) {
       out["parent"] = id(argument->getParent());
@@ -240,6 +391,14 @@ struct Graph {
     }
     if (auto *instruction = dyn_cast<Instruction>(value)) {
       out["opcode"] = instruction->getOpcodeName();
+      out["metadata-attachments"] = metadataAttachments(instruction, instruction->getModule());
+      json::Array debugRecords;
+      for (DbgRecord &record : instruction->getDbgRecordRange()) {
+        std::string text; raw_string_ostream stream(text); record.print(stream);
+        debugRecords.push_back(std::move(text));
+      }
+      out["debug-records"] = std::move(debugRecords);
+      operatorFlags(out, instruction);
       out["parent"] = id(instruction->getParent());
       json::Array successors;
       if (instruction->isTerminator())
@@ -255,6 +414,7 @@ struct Graph {
       }
       if (auto *cmp = dyn_cast<CmpInst>(instruction))
         out["predicate"] = CmpInst::getPredicateName(cmp->getPredicate()).str();
+      if (auto *cmp = dyn_cast<ICmpInst>(instruction)) out["same-sign"] = cmp->hasSameSign();
       if (auto *op = dyn_cast<OverflowingBinaryOperator>(instruction)) {
         out["nuw"] = op->hasNoUnsignedWrap();
         out["nsw"] = op->hasNoSignedWrap();
@@ -263,20 +423,148 @@ struct Graph {
       if (auto *load = dyn_cast<LoadInst>(instruction)) {
         out["volatile"] = load->isVolatile();
         out["alignment"] = static_cast<int64_t>(load->getAlign().value());
-        out["ordering"] = static_cast<int64_t>(load->getOrdering());
-        out["sync-scope"] = static_cast<int64_t>(load->getSyncScopeID());
+        orderingFields(out, "ordering", load->getOrdering());
+        scopeFields(out, load->getContext(), load->getSyncScopeID());
       }
       if (auto *store = dyn_cast<StoreInst>(instruction)) {
         out["volatile"] = store->isVolatile();
         out["alignment"] = static_cast<int64_t>(store->getAlign().value());
-        out["ordering"] = static_cast<int64_t>(store->getOrdering());
-        out["sync-scope"] = static_cast<int64_t>(store->getSyncScopeID());
+        orderingFields(out, "ordering", store->getOrdering());
+        scopeFields(out, store->getContext(), store->getSyncScopeID());
       }
+      if (auto *call = dyn_cast<CallBase>(instruction)) {
+        out["callee"] = id(call->getCalledOperand());
+        out["callee-slot"] = call->getCalledOperandUse().getOperandNo();
+        out["function-type"] = typeID(call->getFunctionType());
+        out["calling-convention"] = static_cast<int64_t>(call->getCallingConv());
+        json::Array args, slots, bundles;
+        for (Use &argument : call->args()) { args.push_back(id(argument.get())); slots.push_back(argument.getOperandNo()); }
+        out["arguments"] = std::move(args); out["argument-slots"] = std::move(slots);
+        for (unsigned i = 0; i < call->getNumOperandBundles(); ++i) {
+          auto bundle = call->getOperandBundleAt(i);
+          json::Array inputs, inputSlots;
+          for (const Use &input : bundle.Inputs) { inputs.push_back(id(input.get())); inputSlots.push_back(input.getOperandNo()); }
+          json::Object row{{"inputs", std::move(inputs)}, {"input-slots", std::move(inputSlots)}};
+          stringField(row, "tag", bundle.getTagName()); bundles.push_back(std::move(row));
+        }
+        out["operand-bundles"] = std::move(bundles);
+        std::string attrs; raw_string_ostream stream(attrs); call->getAttributes().print(stream);
+        out["attributes"] = std::move(attrs); out["attribute-records"] = attributeRecords(call->getAttributes());
+        if (auto *plain = dyn_cast<CallInst>(call)) {
+          const char *names[] = {"none", "tail", "musttail", "notail"};
+          out["tail-kind"] = names[plain->getTailCallKind()];
+        }
+      }
+      if (auto *alloca = dyn_cast<AllocaInst>(instruction)) {
+        out["allocated-type"] = typeID(alloca->getAllocatedType());
+        out["alignment"] = static_cast<int64_t>(alloca->getAlign().value());
+        out["address-space"] = alloca->getAddressSpace();
+      }
+      if (auto *gep = dyn_cast<GetElementPtrInst>(instruction)) {
+        out["source-element-type"] = typeID(gep->getSourceElementType());
+        out["result-element-type"] = typeID(gep->getResultElementType());
+        out["inbounds"] = gep->isInBounds(); out["nusw"] = gep->hasNoUnsignedSignedWrap(); out["nuw"] = gep->hasNoUnsignedWrap();
+        json::Array indices, slots;
+        for (Use &index : gep->indices()) { indices.push_back(id(index.get())); slots.push_back(index.getOperandNo()); }
+        out["indices"] = std::move(indices); out["index-slots"] = std::move(slots); out["pointer-slot"] = 0;
+      }
+      if (auto *fence = dyn_cast<FenceInst>(instruction)) {
+        orderingFields(out, "ordering", fence->getOrdering()); scopeFields(out, fence->getContext(), fence->getSyncScopeID());
+      }
+      if (auto *cmp = dyn_cast<AtomicCmpXchgInst>(instruction)) {
+        out["volatile"] = cmp->isVolatile(); out["weak"] = cmp->isWeak();
+        out["alignment"] = static_cast<int64_t>(cmp->getAlign().value());
+        orderingFields(out, "success-ordering", cmp->getSuccessOrdering());
+        orderingFields(out, "failure-ordering", cmp->getFailureOrdering());
+        scopeFields(out, cmp->getContext(), cmp->getSyncScopeID());
+      }
+      if (auto *rmw = dyn_cast<AtomicRMWInst>(instruction)) {
+        out["volatile"] = rmw->isVolatile(); out["alignment"] = static_cast<int64_t>(rmw->getAlign().value());
+        out["operation"] = static_cast<int64_t>(rmw->getOperation()); out["operation-name"] = AtomicRMWInst::getOperationName(rmw->getOperation()).str();
+        orderingFields(out, "ordering", rmw->getOrdering()); scopeFields(out, rmw->getContext(), rmw->getSyncScopeID());
+      }
+      if (auto *branch = dyn_cast<BranchInst>(instruction)) {
+        out["conditional"] = branch->isConditional(); if (branch->isConditional()) out["condition"] = id(branch->getCondition());
+      }
+      if (auto *switchInst = dyn_cast<SwitchInst>(instruction)) {
+        out["condition"] = id(switchInst->getCondition()); out["default"] = id(switchInst->getDefaultDest());
+        json::Array cases;
+        for (auto &item : switchInst->cases()) cases.push_back(json::Object{
+          {"value", id(item.getCaseValue())}, {"block", id(item.getCaseSuccessor())},
+          {"value-slot", 2 + item.getCaseIndex() * 2}, {"block-slot", 3 + item.getCaseIndex() * 2}});
+        out["cases"] = std::move(cases);
+      }
+      if (auto *extract = dyn_cast<ExtractValueInst>(instruction)) {
+        json::Array indices; for (unsigned index : extract->getIndices()) indices.push_back(index); out["indices"] = std::move(indices);
+      }
+      if (auto *insert = dyn_cast<InsertValueInst>(instruction)) {
+        json::Array indices; for (unsigned index : insert->getIndices()) indices.push_back(index); out["indices"] = std::move(indices);
+      }
+      if (auto *shuffle = dyn_cast<ShuffleVectorInst>(instruction)) {
+        json::Array mask; for (int index : shuffle->getShuffleMask()) mask.push_back(index); out["mask"] = std::move(mask);
+      }
+      if (auto *landing = dyn_cast<LandingPadInst>(instruction)) {
+        out["cleanup"] = landing->isCleanup(); json::Array clauses;
+        for (unsigned i = 0; i < landing->getNumClauses(); ++i) clauses.push_back(json::Object{
+          {"kind", landing->isCatch(i) ? "catch" : "filter"}, {"value", id(landing->getClause(i))}});
+        out["clauses"] = std::move(clauses);
+      }
+      if (auto *pad = dyn_cast<FuncletPadInst>(instruction)) {
+        out["parent-pad"] = id(pad->getParentPad()); json::Array args;
+        for (unsigned i = 0; i < pad->arg_size(); ++i) args.push_back(id(pad->getArgOperand(i))); out["arguments"] = std::move(args);
+      }
+      if (auto *switchPad = dyn_cast<CatchSwitchInst>(instruction)) {
+        out["parent-pad"] = id(switchPad->getParentPad()); out["unwinds-to-caller"] = switchPad->unwindsToCaller();
+        if (switchPad->hasUnwindDest()) out["unwind-destination"] = id(switchPad->getUnwindDest());
+        json::Array handlers; for (BasicBlock *block : switchPad->handlers()) handlers.push_back(id(block)); out["handlers"] = std::move(handlers);
+      }
+      if (auto *cleanup = dyn_cast<CleanupReturnInst>(instruction)) {
+        out["cleanup-pad"] = id(cleanup->getCleanupPad()); out["unwinds-to-caller"] = cleanup->unwindsToCaller();
+        if (cleanup->hasUnwindDest()) out["unwind-destination"] = id(cleanup->getUnwindDest());
+      }
+      if (auto *catchReturn = dyn_cast<CatchReturnInst>(instruction)) out["catch-pad"] = id(catchReturn->getCatchPad());
     }
     if (auto *integer = dyn_cast<ConstantInt>(value)) {
       SmallString<64> decimal;
       integer->getValue().toString(decimal, 10, true);
       out["value"] = decimal.str().str();
+      out["unsigned-value"] = apIntString(integer->getValue(), 10);
+      out["bits"] = integer->getBitWidth(); out["bits-hex"] = apIntString(integer->getValue(), 16);
+    }
+    if (auto *data = dyn_cast<ConstantDataSequential>(value)) {
+      Type *elementType = data->getElementType();
+      unsigned elementBits = elementType->isIntegerTy() ? elementType->getIntegerBitWidth() : APFloat::semanticsSizeInBits(elementType->getFltSemantics());
+      out["element-type"] = typeID(elementType); out["element-bits"] = elementBits;
+      out["count"] = data->getNumElements(); out["encoding"] = "packed-little-endian-element-bits";
+      std::string packed;
+      static const char digits[] = "0123456789abcdef";
+      for (unsigned i = 0; i < data->getNumElements(); ++i) {
+        APInt bits = elementType->isIntegerTy() ? data->getElementAsAPInt(i) : data->getElementAsAPFloat(i).bitcastToAPInt();
+        for (unsigned offset = 0; offset < elementBits; offset += 8) {
+          unsigned byte = bits.extractBitsAsZExtValue(std::min(8u, elementBits - offset), offset);
+          packed.push_back(digits[byte >> 4]); packed.push_back(digits[byte & 15]);
+        }
+      }
+      out["data-hex"] = std::move(packed);
+    }
+    if (auto *floating = dyn_cast<ConstantFP>(value)) {
+      APInt bits = floating->getValueAPF().bitcastToAPInt();
+      out["bits"] = bits.getBitWidth(); out["bits-hex"] = apIntString(bits, 16); out["semantics"] = floatSemantics(floating->getType());
+    }
+    if (auto *expression = dyn_cast<ConstantExpr>(value)) {
+      out["opcode"] = expression->getOpcodeName();
+      out["operator-raw-flags"] = expression->getRawSubclassOptionalData();
+      operatorFlags(out, expression);
+      if (auto *gep = dyn_cast<GEPOperator>(expression)) {
+        out["source-element-type"] = typeID(gep->getSourceElementType()); out["result-element-type"] = typeID(gep->getResultElementType());
+        out["inbounds"] = gep->isInBounds(); out["nusw"] = gep->hasNoUnsignedSignedWrap(); out["nuw"] = gep->hasNoUnsignedWrap();
+      }
+    }
+    if (auto *asmValue = dyn_cast<InlineAsm>(value)) {
+      stringField(out, "asm", asmValue->getAsmString()); stringField(out, "constraints", asmValue->getConstraintString());
+      out["dialect"] = asmValue->getDialect() == InlineAsm::AD_ATT ? "att" : "intel";
+      out["side-effects"] = asmValue->hasSideEffects(); out["align-stack"] = asmValue->isAlignStack();
+      out["can-throw"] = asmValue->canThrow(); out["function-type"] = typeID(asmValue->getFunctionType());
     }
     return out;
   }
@@ -285,6 +573,15 @@ struct Graph {
     for (Type *child : type->subtypes()) elements.push_back(typeID(child));
     json::Object out{{"id", typeID(type)}, {"kind", typeKind(type)},
                      {"ir", renderType(type)}, {"elements", std::move(elements)}};
+    if (type->isFloatingPointTy()) {
+      out["semantics"] = floatSemantics(type); out["bits"] = APFloat::semanticsSizeInBits(type->getFltSemantics());
+    }
+    if (auto *target = dyn_cast<TargetExtType>(type)) {
+      nameField(out, target->getName()); json::Array types, integers;
+      for (Type *child : target->type_params()) types.push_back(typeID(child));
+      for (unsigned integer : target->int_params()) integers.push_back(integer);
+      out["type-parameters"] = std::move(types); out["integer-parameters"] = std::move(integers);
+    }
     if (auto *integer = dyn_cast<IntegerType>(type)) out["bits"] = integer->getBitWidth();
     if (auto *pointer = dyn_cast<PointerType>(type)) out["address-space"] = pointer->getAddressSpace();
     if (auto *array = dyn_cast<ArrayType>(type)) out["count"] = array->getNumElements();
@@ -308,6 +605,12 @@ struct Graph {
     for (GlobalIFunc &ifunc : module.ifuncs()) ifuncs.push_back(id(&ifunc));
     json::Object header{{"functions", std::move(functions)}, {"globals", std::move(globals)},
                         {"aliases", std::move(aliases)}, {"ifuncs", std::move(ifuncs)}};
+    json::Array namedMetadata;
+    for (NamedMDNode &metadata : module.named_metadata()) {
+      std::string text; raw_string_ostream stream(text); metadata.print(stream);
+      json::Object row{{"ir", std::move(text)}}; nameField(row, metadata.getName()); namedMetadata.push_back(std::move(row));
+    }
+    header["named-metadata"] = std::move(namedMetadata);
     stringField(header, "source-filename", module.getSourceFileName());
     stringField(header, "target-triple", module.getTargetTriple().str());
     stringField(header, "data-layout", module.getDataLayoutStr());
@@ -317,7 +620,7 @@ struct Graph {
     json::Array nodes, typeNodes;
     for (Value *value : values) nodes.push_back(node(value));
     for (Type *type : types) typeNodes.push_back(typeNode(type));
-    return json::Object{{"format", "pattern.llvm.graph/1"}, {"llvm-version", LLVM_VERSION_STRING},
+    return json::Object{{"format", "pattern.llvm.graph/2"}, {"llvm-version", LLVM_VERSION_STRING},
       {"coverage", coverage()}, {"module", moduleHeader(module)},
       {"nodes", std::move(nodes)}, {"types", std::move(typeNodes)}};
   }
@@ -330,7 +633,7 @@ struct Graph {
     // Presentation only: path-dependent ModuleID does not identify graph nodes.
     header["identifier"] = json::fixUTF8(module.getModuleIdentifier());
     return json::Object{
-      {"graph-sha256", signature}, {"format", "pattern.llvm/1"},
+      {"graph-sha256", signature}, {"format", "pattern.llvm/2"},
       {"llvm-version", LLVM_VERSION_STRING}, {"coverage", coverage()},
       {"module", std::move(header)},
       {"nodes", std::move(*graphRecords.get("nodes"))},
@@ -339,17 +642,11 @@ struct Graph {
 };
 
 static bool allowed(User *user) {
-  if (auto *ret = dyn_cast<ReturnInst>(user)) return ret->getNumOperands() == 1;
-  auto *binary = dyn_cast<BinaryOperator>(user);
-  if (!binary || !binary->getType()->isIntOrIntVectorTy()) return false;
-  switch (binary->getOpcode()) {
-    case Instruction::Add: case Instruction::Sub: case Instruction::Mul:
-    case Instruction::And: case Instruction::Or: case Instruction::Xor:
-    case Instruction::Shl: case Instruction::LShr: case Instruction::AShr:
-    case Instruction::UDiv: case Instruction::SDiv: case Instruction::URem: case Instruction::SRem:
-      return true;
-    default: return false;
-  }
+  auto *instruction = dyn_cast<Instruction>(user);
+  if (!instruction) return false;
+  StringRef policy = pattern_llvm_profile::editPolicy(instruction->getOpcode());
+  if (policy == "return-value") return instruction->getNumOperands() == 1;
+  return policy == "integer-binop" && isa<BinaryOperator>(instruction) && instruction->getType()->isIntOrIntVectorTy();
 }
 static bool valueOperand(Value *value) {
   return !isa<BasicBlock>(value) && !isa<MetadataAsValue>(value) && !value->getType()->isTokenTy();
@@ -367,7 +664,7 @@ static int rewrite(Module &module, Graph &graph, StringRef inputBytes,
   if (!parsed) return fail("Invalid patch JSON: " + toString(parsed.takeError()));
   auto *patch = parsed->getAsObject();
   if (!patch || !exactKeys(*patch, {"format", "source-sha256", "llvm-version", "graph-sha256", "edits"}) ||
-      patch->getString("format") != "pattern.llvm.edits/1") return fail("Unsupported patch object/format");
+      patch->getString("format") != "pattern.llvm.edits/2") return fail("Unsupported patch object/format");
   auto sourceHash = patch->getString("source-sha256");
   if (!sourceHash || *sourceHash != sha256(inputBytes)) return fail("Patch source SHA256 mismatch");
   if (patch->getString("llvm-version") != LLVM_VERSION_STRING)
@@ -435,9 +732,12 @@ static int rewrite(Module &module, Graph &graph, StringRef inputBytes,
 }
 
 int main(int argc, char **argv) {
+  if (argc == 2 && StringRef(argv[1]) == "capabilities") {
+    outs() << json::Value(pattern_llvm_profile::capabilities()) << '\n'; return 0;
+  }
   if (!((argc == 3 && StringRef(argv[1]) == "import") ||
         (argc == 5 && StringRef(argv[1]) == "rewrite")))
-    return fail("Usage: bridge import INPUT | bridge rewrite INPUT PATCH OUTPUT");
+    return fail("Usage: bridge capabilities | bridge import INPUT | bridge rewrite INPUT PATCH OUTPUT");
   auto input = MemoryBuffer::getFile(argv[2]);
   if (!input) return fail("Cannot read input: " + input.getError().message());
   std::string canonical, identifier;
@@ -451,6 +751,8 @@ int main(int argc, char **argv) {
     std::string diagnostics;
     raw_string_ostream stream(diagnostics);
     if (verifyModule(*module, &stream)) return fail("Input module invalid: " + diagnostics);
+    for (Function &function : *module) for (Instruction &instruction : instructions(function))
+      if (pattern_llvm_profile::reserved(instruction.getOpcode())) return fail("Internal/reserved opcode is not serializable");
     canonical = assembly(*module);
     identifier = module->getModuleIdentifier();
   }

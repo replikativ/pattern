@@ -1,0 +1,116 @@
+{
+  "format": "pattern.llvm.profile-observation/2",
+  "date": "2026-10-18",
+  "profile-id": "llvm21-persistent-ir/2",
+  "llvm-version": "21.1.2",
+  "base-git-head-before-change": "e136f5fdff6a474ef71f52308edcc15cff33df64",
+  "provenance": "Uncommitted /2 runtime and test sources are pinned below; this does not relabel historical /1 measurements.",
+  "host": {
+    "clojure-cli": "1.12.0.1530",
+    "java": "java 25.0.1 2025-10-21 LTS",
+    "llvm-packages": [
+      "clang-21 1:21.1.2-2ubuntu6",
+      "llvm-21 1:21.1.2-2ubuntu6",
+      "llvm-21-dev 1:21.1.2-2ubuntu6"
+    ]
+  },
+  "native-build": {
+    "optimization": "-O0",
+    "bridge-sha256": "8b14b0830652a8891a48fcb2fcacdadd38700a7a991981b064e0b93b12aa2ade",
+    "binary-reproducibility-claimed": false
+  },
+  "validation": {
+    "default-suite": {
+      "tests": 23,
+      "assertions": 234,
+      "failures": 0,
+      "errors": 0
+    },
+    "bifurcan-suite": {
+      "tests": 25,
+      "assertions": 253,
+      "failures": 0,
+      "errors": 0
+    },
+    "core-ci-suite": {
+      "tests": 88,
+      "assertions": 622,
+      "failures": 0,
+      "errors": 0
+    },
+    "declared-enum-slots": 67,
+    "serializable-opcodes-encountered": 65,
+    "reserved-slots": 2,
+    "all-integer-policies-and-return-export": {
+      "integer-opcodes": 13,
+      "edits": 27,
+      "native-verification": true,
+      "semantic-equivalence-claimed": false
+    },
+    "completed-acceptance-steps": [
+      "native-build",
+      "default-suite",
+      "bifurcan-suite",
+      "external-local-root-consumer",
+      "normal-jar-separation"
+    ],
+    "package": {
+      "jar": "pattern-1.0.453.jar",
+      "sha256": "11771d9e085f62dba75e3e96cac0916e6c6ad6a41dd6c5788e90554ff96c4a40",
+      "optional-code-excluded": true,
+      "optional-pom-dependencies-excluded": true
+    }
+  },
+  "resource-envelope": {
+    "acceptance-process-group-peak-rss-bytes": 675098624,
+    "acceptance-elapsed-seconds": 113.48,
+    "core-process-group-peak-rss-bytes": 485588992,
+    "core-elapsed-seconds": 21.09,
+    "jvm-default-heap-limit-mib": 512,
+    "system-available-memory-floor-mib": 1024,
+    "note": "One local acceptance run including compilation, test JVMs, external consumer and package checks; not a compiler throughput or large-module benchmark."
+  },
+  "runtime-and-test-sources-sha256": {
+    ".github/workflows/llvm.yml": "e305c9f209d56dc2dc2a1839bb9259a1dcf5fd48f12df27d6939857126ada206",
+    "build.clj": "4c953fa7936516b430b9b403a4d7284df4cd8253865275434d947e4ac1667629",
+    "deps.edn": "f5219bd4b8602844c327d2dbe77ddc8053570959c4f58783f49bf002a6dc100a",
+    "modules/llvm/bifurcan/pattern/llvm/benchmark.clj": "d4efaab9a8abc6dc84908801acb88c0d1872c4e30aca60301858586b60db1e40",
+    "modules/llvm/bifurcan/pattern/llvm/bifurcan.clj": "28f85336a8ce5ec7f41f7ddb9e9012821a2d3c9ec10bece2bc2ef4da2521333c",
+    "modules/llvm/deps.edn": "85c69301f99a0c5c018a34295dc8d2828b0b47f9f3db3cc1d6b4962e24907b6f",
+    "modules/llvm/native/bridge.cpp": "5a75349483c0dcebab4f18a29cf0c5f3bc9a8a03985ac814a49a62986d4a8435",
+    "modules/llvm/native/build.py": "caa454494e4d4cf69888a478d09259d821337d9c7abf58775274d14327bb9a86",
+    "modules/llvm/native/profile.h": "a18c69a45a53cd8b8a7fe1515bd58ba3392d8e8390884b2a6fba2380efb14951",
+    "modules/llvm/scripts/ci.py": "1071652647df0c391ebbf4915e46731e72c1aa75ec3a80c97a6ed67e322cb8c6",
+    "modules/llvm/src/pattern/llvm/graph.clj": "23fd78c459d547b63f09830ff05b67c49fe695ac3bdb2e9ff9af73c6a9422373",
+    "modules/llvm/src/pattern/llvm/profile.edn": "809aa3f358d13e4516d25160b8d00a553a0f5b1d2609b6bc492dafc6aa1ba1b5",
+    "modules/llvm/src/pattern/llvm/support.clj": "3782e5573443c84794de22af478c07cc294c30991b1c7ff8dd557a1bff56dbd8",
+    "modules/llvm/src/pattern/llvm.clj": "2d1a4b80acc83a2d6db43ac5a408fc80285fac1df61b9dcb266f6825f977de5c",
+    "modules/llvm/test/fixtures/graph.ll": "9e3453fd6da38efdcb5c61a8d6a7278c281c9a86363285bede8773e2d587573e",
+    "modules/llvm/test/fixtures/names.ll": "996be83ae7a431ec14424d49ef42500f9218c9b6667a47de7d0687dba87f2d9d",
+    "modules/llvm/test/fixtures/opcodes.ll": "c7f2e13050b6e69b4645793a6b06da2e3dbb0931501d083831dee4a5d5285341",
+    "modules/llvm/test/fixtures/profile-debug.ll": "ab9ac13d54d7ddc174321dde7f762b88e8c097658d1a451bbd338df5bd5d8f78",
+    "modules/llvm/test/fixtures/profile.ll": "2269555fa700fd748cf042ada0e0114effeb7bb2cf178bda81f1358dbbc045f7",
+    "modules/llvm/test/pattern/llvm/bifurcan_test.clj": "b230189c5d65807905002e48bb477ec69ad72f8194c4911779b2d7fe4271f8f8",
+    "modules/llvm/test/pattern/llvm/graph_test.clj": "2aa4df3352ab043924410614f8dd10e6af7af62bc5cded50ec27d382aea49382",
+    "modules/llvm/test/pattern/llvm/integration_test.clj": "afe87dffd58668a1b6676dfc1be81f0cc8dc42f62553bc0198f3f4e8f9f50e7a",
+    "modules/llvm/test/pattern/llvm/profile_test.clj": "9b4ef556e34ae3901ecde6c7d3177bf6226896a40c2f527648a6c0d28b95a90e",
+    "modules/llvm/test/pattern/llvm/test_runner.clj": "0b0724019362812a6c4fcfb75c56a1754255a8ba5e2ab9a6866286c4a553c67d"
+  },
+  "local-artifacts-sha256": {
+    "modules/llvm/target/ci/receipt.json": "f193f653812b611032dc7edf4df73460a5ac8eee1e9f8601ac29a132504fc855",
+    "modules/llvm/target/landing/acceptance-v2-final.json": "b132b628762e1a5924f3b5267022f6e36a34381a960d9ea93980821215589686",
+    "modules/llvm/target/landing/acceptance-v2-final.log": "debfd4284d0f18e9b6ab6d9c879f6f27644145c01758a9efc8fb4b285d242938",
+    "modules/llvm/target/landing/core-v2-final.json": "f5996cedf692f39fc714608b40aff311e6cbfe59ecd143baa2a7d045c32f4def",
+    "modules/llvm/target/landing/core-v2-final.log": "90b74b92be649f5488c435a2ee2874f5c0c9d8a142505c30d120fa6b5a9be6e6",
+    "modules/llvm/target/landing/repl-v2.json": "b2079d480152b990c0e94e962f95dbffd9c177cb85d7afec575af6d23d147c00",
+    "modules/llvm/target/landing/repl-v2.log": "0b9f9e4b1d216630320260ab6be79687442892e86094073b0961d0a09f50cd84"
+  },
+  "limitations": [
+    "All65 fixture encounters do not establish semantic completeness or exhaustive field/flag combinations.",
+    "Metadata/debug relationships remain opaque inventories plus assembly capsule.",
+    "Construction, CFG/PHI/call/global/type edits and arbitrary module reconstruction are not supported.",
+    "MIR, MLIR, SelectionDAG, VPlan and pass/JIT execution have no current adapter.",
+    "Local-root consumption tested; no standalone Maven artifact published.",
+    "Remote CI is separate from this local evidence."
+  ]
+}
